@@ -76,6 +76,10 @@ textarea { min-height:70px; resize:vertical; }
 .boot { position:absolute; inset:0; background:#000; color:#ccc; font-family:"Courier New", monospace; padding:24px; z-index:99999; cursor:pointer; }
 .boot-line { font-size:15px; white-space:pre-wrap; }
 
+/* file picker in the editor, match the dark ui */
+input[type="file"] { padding:6px; color:var(--text); }
+input[type="file"]::file-selector-button { background:#22222c; color:var(--text); border:1px solid var(--line); border-radius:6px; padding:8px 12px; margin-right:10px; font:inherit; cursor:pointer; }
+
 /* home page: paper and ink, one serif, one accent, no cards */
 .home { position:fixed; inset:0; overflow:auto; background:#efeae0; color:#1a1a18; font-family:system-ui, sans-serif; z-index:100; }
 .home-wrap { max-width:880px; margin:0 auto; padding:0 20px; }
