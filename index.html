@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://apis.google.com; style-src 'self'; img-src 'self' https: http: data:; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://*.cloudfunctions.net https://identitytoolkit.googleapis.com https://securetoken.googleapis.com; frame-src https://*.firebaseapp.com https://accounts.google.com; object-src 'none'; base-uri 'none'; form-action 'self'">
+  <title>RetroFolio</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="builder" class="builder hidden">
+    <header class="topbar">
+      <span class="brand">RetroFolio</span>
+      <div class="topbar-actions">
+        <button id="mode-toggle" class="btn" type="button">Live Preview</button>
+        <button id="login-btn" class="btn" type="button">sign in</button>
+      </div>
+    </header>
+    <main class="studio">
+      <section class="panel editor">
+        <nav id="tabs" class="tabs"></nav>
+        <div id="tab-body" class="tab-body"></div>
+      </section>
+      <section class="panel preview">
+        <div class="preview-label">LIVE PREVIEW</div>
+        <div id="os-root" class="os-root"></div>
+      </section>
+    </main>
+  </div>
+  <div id="viewer" class="os-root full hidden"></div>
+  <div id="toast" class="toast hidden"></div>
+  <script type="module" src="script.js"></script>
+</body>
+</html>
