@@ -20,7 +20,7 @@ const CNAME_TARGET = 'cname.retrofolio.app';
 const FB_VERSION = '10.12.2';
 const GRID_BG = 'linear-gradient(rgba(255,255,255,.08) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.08) 1px, transparent 1px)';
 // paste your firebase web config here. these values are public, security comes from the rules.
-const FIREBASE_CONFIG = { apiKey: 'PASTE_ME', authDomain: 'PASTE_ME', projectId: 'PASTE_ME', appId: 'PASTE_ME' };
+const FIREBASE_CONFIG = { apiKey: 'AIzaSyC6kKX4V5MgeDsDzH9lQjGUZtQXh1wMqHQ', authDomain: 'retrofolio-46409.firebaseapp.com', projectId: 'retrofolio-46409', appId: '1:448603644178:web:ced27a6e348b12092c53cb' };
 
 // ---------- helpers ----------
 const $ = (sel, root = document) => root.querySelector(sel);
