@@ -618,6 +618,7 @@ function loadDraft() {
 }
 
 function startBuilder() {
+  hideHome();
   ui.viewer.classList.add('hidden');
   ui.builder.classList.remove('hidden');
   draft = sanitizeConfig(loadDraft() || clone(TEMPLATES.hackerman.config));
@@ -950,7 +951,20 @@ async function exportStandalone() {
 }
 
 // ---------- routing ----------
+function hideHome() {
+  const home = document.getElementById('home');
+  if (home) home.classList.add('hidden');
+}
+
+function showHome() {
+  const home = document.getElementById('home');
+  if (home) home.classList.remove('hidden');
+  if (ui.builder) ui.builder.classList.add('hidden');
+  if (ui.viewer) ui.viewer.classList.add('hidden');
+}
+
 async function showViewer(loader) {
+  hideHome();
   if (ui.builder) ui.builder.classList.add('hidden');
   ui.viewer.classList.remove('hidden');
   ui.viewer.textContent = 'loading...';
@@ -977,9 +991,10 @@ function route() {
   const seg = location.pathname.replace(/^\/+|\/+$/g, '').toLowerCase();
   const studio = seg === 'studio' || seg === 'edit';
 
-  if (MAIN_HOSTS.includes(host) === false) return showViewer(() => loadByDomain(host));
+  if (MAIN_HOSTS.includes(host) === false && host.endsWith('.vercel.app') === false) return showViewer(() => loadByDomain(host));
   if (location.hash.startsWith('#data=') && studio === false) return showViewer(async () => decodeShare(location.hash.slice(6)));
-  if (studio || seg === '') return startBuilder();
+  if (studio) return startBuilder();
+  if (seg === '') return showHome();
   return showViewer(() => loadBySlug(seg));
 }
 
