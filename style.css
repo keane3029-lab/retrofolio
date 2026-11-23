@@ -6,7 +6,9 @@ html, body { margin:0; height:100%; background:var(--bg); color:var(--text); fon
 /* builder */
 .builder { height:100%; display:flex; flex-direction:column; }
 .topbar { display:flex; justify-content:space-between; align-items:center; padding:10px 16px; border-bottom:1px solid var(--line); }
-.brand { font-weight:700; letter-spacing:.5px; color:var(--accent); }
+.brand { font-weight:700; letter-spacing:.5px; color:var(--accent); display:inline-flex; align-items:center; gap:8px; }
+.logo { flex:none; color:currentColor; }
+.home-mark .logo { color:#1a1a18; }
 .topbar-actions { display:flex; gap:8px; }
 .btn, .mini, .tab, .folder-btn { background:#22222c; color:var(--text); border:1px solid var(--line); border-radius:6px; padding:8px 12px; cursor:pointer; font:inherit; }
 .btn:hover, .tab:hover { border-color:var(--accent); }
