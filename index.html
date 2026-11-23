@@ -5,9 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://apis.google.com; style-src 'self'; img-src 'self' https: http: data:; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://*.cloudfunctions.net https://identitytoolkit.googleapis.com https://securetoken.googleapis.com; frame-src https://*.firebaseapp.com https://accounts.google.com; object-src 'none'; base-uri 'none'; form-action 'self'">
   <title>RetroFolio</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='2' y='3' width='20' height='18' fill='none' stroke='%231a1a18' stroke-width='2'/%3E%3Crect x='2' y='3' width='20' height='4' fill='%23c8442b'/%3E%3Crect x='6' y='11' width='4' height='4' fill='%231a1a18'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
+  <!-- home page only. the studio lives in studio.html -->
   <main id="home" class="home">
     <div class="home-wrap">
       <nav class="home-nav">
@@ -51,26 +53,6 @@
       </footer>
     </div>
   </main>
-  <div id="builder" class="builder hidden">
-    <header class="topbar">
-      <span class="brand"><svg class="logo" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><rect x="2" y="3" width="20" height="18" fill="none" stroke="currentColor" stroke-width="2"/><rect x="2" y="3" width="20" height="4" fill="#c8442b"/><rect x="6" y="11" width="4" height="4" fill="currentColor"/></svg>RetroFolio</span>
-      <div class="topbar-actions">
-        <button id="mode-toggle" class="btn" type="button">Live Preview</button>
-        <button id="login-btn" class="btn" type="button">sign in</button>
-      </div>
-    </header>
-    <main class="studio">
-      <section class="panel editor">
-        <div class="editor-logo"><svg class="logo" viewBox="0 0 24 24" width="28" height="28" aria-hidden="true"><rect x="2" y="3" width="20" height="18" fill="none" stroke="currentColor" stroke-width="2"/><rect x="2" y="3" width="20" height="4" fill="#c8442b"/><rect x="6" y="11" width="4" height="4" fill="currentColor"/></svg></div>
-        <nav id="tabs" class="tabs"></nav>
-        <div id="tab-body" class="tab-body"></div>
-      </section>
-      <section class="panel preview">
-        <div class="preview-label">LIVE PREVIEW</div>
-        <div id="os-root" class="os-root"></div>
-      </section>
-    </main>
-  </div>
   <div id="viewer" class="os-root full hidden"></div>
   <div id="toast" class="toast hidden"></div>
   <script type="module" src="script.js"></script>
