@@ -970,7 +970,13 @@ async function showViewer(loader) {
   ui.viewer.textContent = 'loading...';
   try {
     const cfg = await loader();
-    if (cfg === null) { location.replace('/'); return; }
+    if (cfg === null) {
+      // unknown slug on our own hosts goes home. on a custom domain with no site, show a plain message (redirecting would loop)
+      const ownHost = MAIN_HOSTS.includes(location.hostname) || location.hostname.endsWith('.vercel.app');
+      if (ownHost) { location.replace('/'); return; }
+      ui.viewer.textContent = 'no retro os lives here.';
+      return;
+    }
     renderOS(ui.viewer, cfg, { boot: true });
   } catch (err) {
     ui.viewer.textContent = 'could not load: ' + err.message;
