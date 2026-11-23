@@ -12,41 +12,35 @@
   <!-- home page only. the studio lives in studio.html -->
   <main id="home" class="home">
     <div class="home-wrap">
-      <nav class="home-nav">
-        <span class="home-mark"><svg class="logo" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><rect x="2" y="3" width="20" height="18" fill="none" stroke="currentColor" stroke-width="2"/><rect x="2" y="3" width="20" height="4" fill="#c8442b"/><rect x="6" y="11" width="4" height="4" fill="currentColor"/></svg>retrofolio</span>
+      <header class="home-top">
+        <span class="home-mark">retrofolio</span>
         <a href="/studio">open studio</a>
-      </nav>
-      <section class="home-hero">
-        <h1>a portfolio that opens like a computer.</h1>
-        <p>pick a retro desktop, drop in your projects, and publish a link. visitors get a boot screen, a file explorer, and a terminal that answers back.</p>
-        <a class="home-cta" href="/studio">start building</a>
-        <div class="home-mock" aria-hidden="true">
-          <div class="home-mock-bar"><span>my_portfolio.exe</span><span>_ □ ×</span></div>
+      </header>
+
+      <section class="home-intro">
+        <div>
+          <h1>a portfolio that opens like a computer.</h1>
+          <p class="home-lede">pick a retro desktop, drop in your projects, and publish a link. visitors get a boot screen, a file explorer, and a terminal that answers back.</p>
+          <p><a class="home-go" href="/studio">start building</a></p>
+        </div>
+        <figure class="home-mock" aria-hidden="true">
+          <div class="home-mock-bar"><span>my portfolio</span><span>_</span></div>
           <div class="home-mock-body">
             <span>C:\&gt;</span> open projects<br>
             &nbsp;&nbsp;void-run-3d.py<br>
             &nbsp;&nbsp;poor-uno/<br>
             <span>C:\&gt;</span> _
           </div>
-        </div>
+        </figure>
       </section>
-      <section class="home-section">
-        <p class="home-label">how it goes</p>
-        <ol class="home-steps">
-          <li><span class="n">1</span><div><h3>pick a starting point</h3><p>four presets, or a blank desktop.</p></div></li>
-          <li><span class="n">2</span><div><h3>fill it in</h3><p>projects, text files, and secret files that only unlock from the terminal.</p></div></li>
-          <li><span class="n">3</span><div><h3>publish</h3><p>choose a handle and get a link. the copy-link option works without an account.</p></div></li>
-        </ol>
+
+      <section class="home-body">
+        <p><b>pick a starting point.</b> four presets, or a blank desktop.</p>
+        <p><b>fill it in.</b> projects, text files, and secret files that only unlock from the terminal.</p>
+        <p><b>publish.</b> choose a handle and get a link. the copy-link option works without an account.</p>
+        <p>visitors get a boot sequence they can skip, windows they can drag and tap even on a phone, a terminal with your own commands, and a start menu with your links.</p>
       </section>
-      <section class="home-section">
-        <p class="home-label">what visitors get</p>
-        <ul class="home-list">
-          <li>a boot sequence they can skip</li>
-          <li>windows they can drag and tap, even on a phone</li>
-          <li>a terminal with your own commands</li>
-          <li>a start menu with your links</li>
-        </ul>
-      </section>
+
       <footer class="home-foot">
         <span>retrofolio</span>
         <span>a desktop, and a link to share it</span>
