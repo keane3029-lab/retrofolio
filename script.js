@@ -970,7 +970,7 @@ async function showViewer(loader) {
   ui.viewer.textContent = 'loading...';
   try {
     const cfg = await loader();
-    if (cfg === null) { ui.viewer.textContent = '404. no retro os lives here.'; return; }
+    if (cfg === null) { location.replace('/'); return; }
     renderOS(ui.viewer, cfg, { boot: true });
   } catch (err) {
     ui.viewer.textContent = 'could not load: ' + err.message;
