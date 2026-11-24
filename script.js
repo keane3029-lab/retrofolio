@@ -317,6 +317,24 @@ async function loadByDomain(host) {
   return loadBySlug(snap.data().slug);
 }
 
+// every site this account owns. the rules allow this query because each result matches ownerUid == your uid.
+async function listMySites() {
+  const f = await firebaseApp();
+  const user = requireUser(f);
+  const q = f.fs.query(f.fs.collection(f.db, 'sites'), f.fs.where('ownerUid', '==', user.uid));
+  const snap = await f.fs.getDocs(q);
+  return snap.docs.map((d) => d.id).sort();
+}
+
+// loads one of your own sites so you can edit it in the builder. config is a json string in firestore.
+async function loadMySite(slug) {
+  const f = await firebaseApp();
+  const user = requireUser(f);
+  const snap = await f.fs.getDoc(f.fs.doc(f.db, 'sites', slug));
+  if (snap.exists() === false || snap.data().ownerUid !== user.uid) throw new Error('that site is not yours');
+  return sanitizeConfig(JSON.parse(snap.data().config));
+}
+
 // ---------- renderer (shared by builder preview, live viewer, and export) ----------
 function applyWallpaper(root, wp) {
   const s = root.style;
@@ -864,6 +882,33 @@ function viewPublish(host) {
   const statusEl = el('div', { class: 'dim', text: '' });
   const dnsBox = el('div', { class: 'col' });
 
+  const mySitesBox = el('div', { class: 'col' });
+  const renderMySites = async () => {
+    mySitesBox.textContent = '';
+    try {
+      const slugs = await listMySites();
+      if (slugs.length === 0) { mySitesBox.append(el('p', { class: 'dim', text: 'no published sites yet.' })); return; }
+      for (const slug of slugs) {
+        mySitesBox.append(el('div', { class: 'row' },
+          el('span', { text: '/' + slug }),
+          el('span', { class: 'row-wrap' },
+            btn('Edit', async () => {
+              try {
+                draft = await loadMySite(slug);
+                commit();
+                renderBody();
+                flash('loaded ' + slug);
+              } catch (err) { flash(err.message); }
+            }),
+            el('a', { class: 'btn', href: '/' + slug, target: '_blank', rel: 'noopener', text: 'Open' }),
+          ),
+        ));
+      }
+    } catch (err) {
+      mySitesBox.append(el('p', { class: 'dim', text: err.message }));
+    }
+  };
+
   const showDns = (info) => {
     dnsBox.textContent = '';
     dnsBox.append(
@@ -889,6 +934,9 @@ function viewPublish(host) {
       try { siteOut.textContent = 'live at retrofolio.app/' + await publishSite(handle.value); } catch (err) { flash(err.message); }
     }),
     siteOut,
+    el('h3', { text: 'Your sites' }),
+    mySitesBox,
+    btn('Refresh list', () => renderMySites()),
     btn('Copy instant URL (no account)', async () => {
       try { await navigator.clipboard.writeText(instantUrl()); flash('instant url copied'); } catch (err) { flash(err.message); }
     }),
@@ -901,6 +949,7 @@ function viewPublish(host) {
     el('h3', { text: 'Offline backup' }),
     btn('Download index.html', () => exportStandalone().catch((err) => flash(err.message))),
   );
+  renderMySites();
 }
 
 // ---------- standalone export (inline script + style, locked down with sha256 csp) ----------
