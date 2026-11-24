@@ -316,7 +316,27 @@ async function loadBySlug(slug) {
   const f = await firebaseApp();
   const snap = await f.fs.getDoc(f.fs.doc(f.db, 'sites', slug));
   if (snap.exists() === false || snap.data().published !== true) return null;
-  return sanitizeConfig(JSON.parse(snap.data().config));
+  const cfg = sanitizeConfig(JSON.parse(snap.data().config));
+  countView(slug).catch(() => {});
+  return cfg;
+}
+
+// visitors are not signed in, so anyone can add a view. the rules only allow the count to go up by exactly 1.
+async function countView(slug) {
+  const f = await firebaseApp();
+  const ref = f.fs.doc(f.db, 'views', slug);
+  try {
+    await f.fs.updateDoc(ref, { count: f.fs.increment(1) });
+  } catch (err) {
+    await f.fs.setDoc(ref, { count: 1 });
+  }
+}
+
+// only the owner can read this (the rules check the site's ownerUid).
+async function getViews(slug) {
+  const f = await firebaseApp();
+  const snap = await f.fs.getDoc(f.fs.doc(f.db, 'views', slug));
+  return snap.exists() ? snap.data().count : 0;
 }
 
 async function loadByDomain(host) {
@@ -949,8 +969,10 @@ function viewPublish(host) {
       const slugs = await listMySites();
       if (slugs.length === 0) { mySitesBox.append(el('p', { class: 'dim', text: 'no published sites yet.' })); return; }
       for (const slug of slugs) {
+        const views = el('span', { class: 'dim', text: '' });
+        getViews(slug).then((n) => { views.textContent = ' · ' + n + ' views'; }).catch(() => {});
         mySitesBox.append(el('div', { class: 'row' },
-          el('span', { text: '/' + slug }),
+          el('span', {}, el('span', { text: '/' + slug }), views),
           el('span', { class: 'row-wrap' },
             btn('Edit', async () => {
               try {
