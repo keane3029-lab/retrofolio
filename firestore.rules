@@ -69,13 +69,16 @@ service cloud.firestore {
         && exists(/databases/$(database)/documents/sites/$(slug))
         && get(/databases/$(database)/documents/sites/$(slug)).data.ownerUid == request.auth.uid;
 
-      // anyone can start a count at 1.
+      // anyone can start a count at 1, but only for a site that is published.
       allow create: if request.resource.data.count == 1
-        && request.resource.data.keys().hasOnly(['count']);
+        && request.resource.data.keys().hasOnly(['count'])
+        && exists(/databases/$(database)/documents/sites/$(slug))
+        && get(/databases/$(database)/documents/sites/$(slug)).data.published == true;
 
-      // the count only goes up by exactly 1 per write.
+      // the count only goes up by exactly 1 per write, and only while the site is published.
       allow update: if request.resource.data.count == resource.data.count + 1
-        && request.resource.data.keys().hasOnly(['count']);
+        && request.resource.data.keys().hasOnly(['count'])
+        && get(/databases/$(database)/documents/sites/$(slug)).data.published == true;
     }
   }
 }

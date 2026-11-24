@@ -340,7 +340,14 @@ async function loadBySlug(slug) {
   const snap = await f.fs.getDoc(f.fs.doc(f.db, 'sites', slug));
   if (snap.exists() === false || snap.data().published !== true) return null;
   const cfg = sanitizeConfig(JSON.parse(snap.data().config));
-  countView(slug).catch(() => {});
+  // count once per tab session so refreshes don't inflate the number
+  const key = 'retrofolio:viewed:' + slug;
+  let fresh = true;
+  try {
+    fresh = sessionStorage.getItem(key) !== '1';
+    sessionStorage.setItem(key, '1');
+  } catch (err) { /* storage blocked: count anyway */ }
+  if (fresh) countView(slug).catch((err) => console.warn('view not counted', err && err.code || err));
   return cfg;
 }
 
@@ -351,6 +358,7 @@ async function countView(slug) {
   try {
     await f.fs.updateDoc(ref, { count: f.fs.increment(1) });
   } catch (err) {
+    // the rules reject updates to a missing doc, so this first view starts the count.
     await f.fs.setDoc(ref, { count: 1 });
   }
 }
