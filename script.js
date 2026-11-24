@@ -10,7 +10,7 @@ const RESERVED = ['admin', 'api', 'studio', 'edit', 'login', 'www', 'support', '
 const THEMES = ['win95', 'ubuntu', 'amber', 'mac'];
 const WALLPAPERS = ['color', 'grid', 'image'];
 const FOLDERS = ['Projects', 'About', 'Secrets'];
-const KINDS = ['project', 'text', 'secret', 'gallery', 'contact', 'note', 'music', 'video', 'timeline', 'projects'];
+const KINDS = ['project', 'text', 'secret', 'gallery', 'contact', 'note', 'music', 'video', 'timeline', 'projects', 'guestbook'];
 const SLUG_RE = /^[a-z0-9-]{3,30}$/;
 const DOMAIN_RE = /^([a-z0-9-]+\.)+[a-z]{2,}$/;
 const HEX_RE = /^#[0-9a-fA-F]{6}$/;
@@ -113,7 +113,7 @@ function sanitizeItem(raw) {
   let folder = 'Secrets';
   if (o.kind === 'project' || o.kind === 'gallery' || o.kind === 'music' || o.kind === 'video' || o.kind === 'projects') folder = 'Projects';
   if (o.kind === 'text') folder = o.folder === 'Projects' ? 'Projects' : 'About';
-  if (o.kind === 'contact' || o.kind === 'note' || o.kind === 'timeline') folder = 'About';
+  if (o.kind === 'contact' || o.kind === 'note' || o.kind === 'timeline' || o.kind === 'guestbook') folder = 'About';
   return {
     id: clampText(o.id, 40) || uid(),
     kind: o.kind,
@@ -334,8 +334,11 @@ async function verifyDomain(domain) {
   return body.verified === true;
 }
 
+let liveSlug = '';
+
 async function loadBySlug(slug) {
   if (SLUG_RE.test(slug) === false) return null;
+  liveSlug = slug;
   const f = await firebaseApp();
   const snap = await f.fs.getDoc(f.fs.doc(f.db, 'sites', slug));
   if (snap.exists() === false || snap.data().published !== true) return null;
@@ -562,6 +565,7 @@ function openItem(os, item) {
   if (item.kind === 'video') return openWindow(os, 'item:' + item.id, item.title, (body) => renderVideo(body, item));
   if (item.kind === 'timeline') return openWindow(os, 'item:' + item.id, item.title, (body) => renderTimeline(body, item));
   if (item.kind === 'projects') return openWindow(os, 'item:' + item.id, item.title, (body) => renderProjectsGrid(os, body, item));
+  if (item.kind === 'guestbook') return openWindow(os, 'item:' + item.id, item.title, (body) => renderGuestbook(body, item));
   openWindow(os, 'item:' + item.id, item.title, (body) => {
     if (item.kind !== 'project') {
       body.append(el('pre', { class: 'notepad', text: item.body || item.description || '(empty file)' }));
@@ -590,6 +594,67 @@ function renderGallery(body, item) {
     grid.append(img);
   });
   body.append(grid);
+}
+
+// guestbook: visitors leave a message on the live site. only the owner can read them, on the publish tab.
+function renderGuestbook(body, item) {
+  body.append(el('p', { class: 'project-desc', text: item.description }));
+  if (!liveSlug) { body.append(el('p', { class: 'dim', text: 'the guestbook works on the live site.' })); return; }
+  const name = input('', { placeholder: 'your name (optional)', maxlength: '60' });
+  const message = area('', 500);
+  const status = el('div', { class: 'dim', text: '' });
+  body.append(
+    field('Name', name),
+    field('Message', message),
+    btn('Sign', async () => {
+      const text = message.value.trim();
+      if (text === '') return flash('write a message first');
+      status.textContent = 'sending...';
+      try {
+        const f = await firebaseApp();
+        await f.fs.addDoc(f.fs.collection(f.db, 'guestbook', liveSlug, 'entries'), {
+          name: name.value.trim().slice(0, 60), message: text.slice(0, 500), createdAt: f.fs.serverTimestamp(),
+        });
+        message.value = ''; name.value = '';
+        status.textContent = 'thanks, your message is in.';
+      } catch (err) {
+        console.warn('guestbook not saved', err && err.code || err);
+        status.textContent = 'could not send. try again later.';
+      }
+    }),
+    status,
+  );
+}
+
+// owner-only: read and delete the messages left on one of your sites.
+async function loadGuestbook(slug, box) {
+  box.textContent = '';
+  box.append(el('p', { class: 'dim', text: 'loading messages for /' + slug + '...' }));
+  try {
+    const f = await firebaseApp();
+    requireUser(f);
+    const q = f.fs.query(f.fs.collection(f.db, 'guestbook', slug, 'entries'), f.fs.orderBy('createdAt', 'desc'));
+    const snap = await f.fs.getDocs(q);
+    box.textContent = '';
+    box.append(el('h3', { text: 'guestbook: /' + slug }));
+    if (snap.empty) { box.append(el('p', { class: 'dim', text: 'no messages yet.' })); return; }
+    snap.docs.forEach((d) => {
+      const e = d.data();
+      const when = e.createdAt && e.createdAt.toDate ? e.createdAt.toDate().toLocaleString() : '';
+      box.append(el('div', { class: 'row' },
+        el('span', {},
+          el('span', { class: 'dim', text: (e.name || 'anonymous') + ' · ' + when }),
+          el('div', { class: 'project-desc', text: e.message }),
+        ),
+        btn('Delete', async () => {
+          try { await f.fs.deleteDoc(d.ref); loadGuestbook(slug, box); } catch (err) { flash(err.message); }
+        }),
+      ));
+    });
+  } catch (err) {
+    box.textContent = '';
+    box.append(el('p', { class: 'dim', text: err.message }));
+  }
 }
 
 // projects grid: a card for every project item on this site. the body text is not used.
@@ -1095,6 +1160,7 @@ function viewPublish(host) {
   const dnsBox = el('div', { class: 'col' });
 
   const mySitesBox = el('div', { class: 'col' });
+  const guestBox = el('div', { class: 'col' });
   const renderMySites = async () => {
     mySitesBox.textContent = '';
     try {
@@ -1115,6 +1181,7 @@ function viewPublish(host) {
               } catch (err) { flash(err.message); }
             }),
             el('a', { class: 'btn', href: '/' + slug, target: '_blank', rel: 'noopener', text: 'Open' }),
+            btn('Guestbook', () => loadGuestbook(slug, guestBox)),
           ),
         ));
       }
@@ -1150,6 +1217,7 @@ function viewPublish(host) {
     siteOut,
     el('h3', { text: 'Your sites' }),
     mySitesBox,
+    guestBox,
     btn('Refresh list', () => renderMySites()),
     btn('Copy instant URL (no account)', async () => {
       try { await navigator.clipboard.writeText(instantUrl()); flash('instant url copied'); } catch (err) { flash(err.message); }
