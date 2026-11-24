@@ -1,0 +1,66 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function siteKeys() {
+      return ['ownerUid', 'slug', 'config', 'published', 'updatedAt'];
+    }
+
+    function domainKeys() {
+      return ['ownerUid', 'slug', 'verified', 'token', 'createdAt'];
+    }
+
+    match /sites/{slug} {
+      // public can read published sites. the owner can also read their own drafts.
+      allow read: if resource == null
+        || resource.data.published == true
+        || (signedIn() && resource.data.ownerUid == request.auth.uid);
+
+      allow create: if signedIn()
+        && request.resource.data.ownerUid == request.auth.uid
+        && slug.matches('^[a-z0-9-]{3,30}$')
+        && (slug in ['admin', 'api', 'studio', 'edit', 'login', 'www', 'support', 'app', 'static', 'assets', 'null', 'undefined', 'retrofolio']) == false
+        && request.resource.data.config is string
+        && request.resource.data.config.size() <= 100000
+        && request.resource.data.keys().hasOnly(siteKeys());
+
+      allow update: if signedIn()
+        && resource.data.ownerUid == request.auth.uid
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.config is string
+        && request.resource.data.config.size() <= 100000
+        && request.resource.data.keys().hasOnly(siteKeys());
+
+      allow delete: if signedIn() && resource.data.ownerUid == request.auth.uid;
+    }
+
+    match /domains/{domain} {
+      // only verified domains are public. owners can see their pending ones.
+      allow read: if resource == null
+        || resource.data.verified == true
+        || (signedIn() && resource.data.ownerUid == request.auth.uid);
+
+      // clients can only bind a fresh, unverified domain. verification happens in the cloud function (admin sdk).
+      allow create: if signedIn()
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.verified == false
+        && domain.matches('^([a-z0-9-]+[.])+[a-z]{2,}$')
+        && domain.matches('(^|.*[.])retrofolio[.]app$') == false
+        && request.resource.data.keys().hasOnly(domainKeys());
+
+      // no flipping verified from the client, and no rebinding a verified domain.
+      allow update: if signedIn()
+        && resource.data.ownerUid == request.auth.uid
+        && request.resource.data.ownerUid == request.auth.uid
+        && resource.data.verified == false
+        && request.resource.data.verified == false
+        && request.resource.data.keys().hasOnly(domainKeys());
+
+      allow delete: if signedIn() && resource.data.ownerUid == request.auth.uid;
+    }
+  }
+}
