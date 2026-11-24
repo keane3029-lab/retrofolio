@@ -114,3 +114,5 @@ input[type="file"]::file-selector-button { background:#22222c; color:var(--text)
   .builder.show-preview .editor { display:none; }
   .preview { min-height:75vh; }
 }
+.gallery { display:grid; grid-template-columns:repeat(auto-fill,minmax(120px,1fr)); gap:8px; }
+.gallery-img { width:100%; height:auto; border:1px solid var(--rule); }
