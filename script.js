@@ -347,8 +347,15 @@ async function loadBySlug(slug) {
     fresh = sessionStorage.getItem(key) !== '1';
     sessionStorage.setItem(key, '1');
   } catch (err) { /* storage blocked: count anyway */ }
-  if (fresh) countView(slug).catch((err) => console.warn('view not counted', err && err.code || err));
+  if (fresh) countVisitor(f, slug, snap.data().ownerUid).catch((err) => console.warn('view not counted', err && err.code || err));
   return cfg;
+}
+
+// the owner's own visits don't count. this only sees the owner when they are signed in on this browser.
+async function countVisitor(f, slug, ownerUid) {
+  if (typeof f.auth.authStateReady === 'function') await f.auth.authStateReady();
+  if (f.auth.currentUser && f.auth.currentUser.uid === ownerUid) return;
+  await countView(slug);
 }
 
 // visitors are not signed in, so anyone can add a view. the rules only allow the count to go up by exactly 1.
