@@ -10,7 +10,7 @@ const RESERVED = ['admin', 'api', 'studio', 'edit', 'login', 'www', 'support', '
 const THEMES = ['win95', 'ubuntu', 'amber', 'mac'];
 const WALLPAPERS = ['color', 'grid', 'image'];
 const FOLDERS = ['Projects', 'About', 'Secrets'];
-const KINDS = ['project', 'text', 'secret', 'gallery', 'contact', 'note', 'music', 'video', 'timeline'];
+const KINDS = ['project', 'text', 'secret', 'gallery', 'contact', 'note', 'music', 'video', 'timeline', 'projects'];
 const SLUG_RE = /^[a-z0-9-]{3,30}$/;
 const DOMAIN_RE = /^([a-z0-9-]+\.)+[a-z]{2,}$/;
 const HEX_RE = /^#[0-9a-fA-F]{6}$/;
@@ -111,7 +111,7 @@ function sanitizeItem(raw) {
   const o = obj(raw);
   if (KINDS.includes(o.kind) === false) return null;
   let folder = 'Secrets';
-  if (o.kind === 'project' || o.kind === 'gallery' || o.kind === 'music' || o.kind === 'video') folder = 'Projects';
+  if (o.kind === 'project' || o.kind === 'gallery' || o.kind === 'music' || o.kind === 'video' || o.kind === 'projects') folder = 'Projects';
   if (o.kind === 'text') folder = o.folder === 'Projects' ? 'Projects' : 'About';
   if (o.kind === 'contact' || o.kind === 'note' || o.kind === 'timeline') folder = 'About';
   return {
@@ -561,6 +561,7 @@ function openItem(os, item) {
   if (item.kind === 'music') return openWindow(os, 'item:' + item.id, item.title, (body) => renderMusic(body, item));
   if (item.kind === 'video') return openWindow(os, 'item:' + item.id, item.title, (body) => renderVideo(body, item));
   if (item.kind === 'timeline') return openWindow(os, 'item:' + item.id, item.title, (body) => renderTimeline(body, item));
+  if (item.kind === 'projects') return openWindow(os, 'item:' + item.id, item.title, (body) => renderProjectsGrid(os, body, item));
   openWindow(os, 'item:' + item.id, item.title, (body) => {
     if (item.kind !== 'project') {
       body.append(el('pre', { class: 'notepad', text: item.body || item.description || '(empty file)' }));
@@ -589,6 +590,29 @@ function renderGallery(body, item) {
     grid.append(img);
   });
   body.append(grid);
+}
+
+// projects grid: a card for every project item on this site. the body text is not used.
+function renderProjectsGrid(os, body, item) {
+  body.append(el('p', { class: 'project-desc', text: item.description }));
+  const projects = visibleItems(os).filter((p) => p.kind === 'project');
+  if (projects.length === 0) { body.append(el('p', { class: 'dim', text: 'no projects yet. add a project item in the builder.' })); return; }
+  body.append(el('div', { class: 'cards' }, projects.map((p) => projectCard(os, p))));
+}
+
+function projectCard(os, p) {
+  const card = el('div', { class: 'card' });
+  if (p.image) {
+    const img = el('img', { class: 'card-img', alt: p.title, loading: 'lazy', referrerpolicy: 'no-referrer' });
+    img.addEventListener('error', () => img.remove());
+    img.src = p.image;
+    card.append(img);
+  }
+  card.append(el('button', { class: 'card-title', type: 'button', text: p.title, onclick: () => openItem(os, p) }));
+  if (p.description) card.append(el('div', { class: 'card-desc', text: p.description }));
+  if (p.tags.length > 0) card.append(el('div', { class: 'tags' }, p.tags.map((t) => el('span', { class: 'tag', text: t }))));
+  if (p.link) card.append(el('a', { class: 'btn-link', href: p.link, target: '_blank', rel: 'noopener noreferrer nofollow', text: 'link out ->' }));
+  return card;
 }
 
 // vertical timeline for resumes: jobs, school, achievements
