@@ -4,13 +4,13 @@
 const LIMITS = {
   configBytes: 100000, items: 30, commands: 50, socials: 10, tags: 8, tagLen: 24,
   title: 60, text: 300, body: 5000, bio: 500, handle: 30, osName: 40, bootText: 1200,
-  url: 300, cmdName: 24, cmdResponse: 1000, shareChars: 120000, gallery: 12, tracks: 12,
+  url: 300, cmdName: 24, cmdResponse: 1000, shareChars: 120000, gallery: 12, tracks: 12, timeline: 15,
 };
 const RESERVED = ['admin', 'api', 'studio', 'edit', 'login', 'www', 'support', 'app', 'static', 'assets', 'null', 'undefined', 'retrofolio'];
 const THEMES = ['win95', 'ubuntu', 'amber', 'mac'];
 const WALLPAPERS = ['color', 'grid', 'image'];
 const FOLDERS = ['Projects', 'About', 'Secrets'];
-const KINDS = ['project', 'text', 'secret', 'gallery', 'contact', 'note', 'music', 'video'];
+const KINDS = ['project', 'text', 'secret', 'gallery', 'contact', 'note', 'music', 'video', 'timeline'];
 const SLUG_RE = /^[a-z0-9-]{3,30}$/;
 const DOMAIN_RE = /^([a-z0-9-]+\.)+[a-z]{2,}$/;
 const HEX_RE = /^#[0-9a-fA-F]{6}$/;
@@ -113,7 +113,7 @@ function sanitizeItem(raw) {
   let folder = 'Secrets';
   if (o.kind === 'project' || o.kind === 'gallery' || o.kind === 'music' || o.kind === 'video') folder = 'Projects';
   if (o.kind === 'text') folder = o.folder === 'Projects' ? 'Projects' : 'About';
-  if (o.kind === 'contact' || o.kind === 'note') folder = 'About';
+  if (o.kind === 'contact' || o.kind === 'note' || o.kind === 'timeline') folder = 'About';
   return {
     id: clampText(o.id, 40) || uid(),
     kind: o.kind,
@@ -128,7 +128,18 @@ function sanitizeItem(raw) {
     images: o.kind === 'gallery' ? listOf(clampText(o.body, LIMITS.body).split('\n').map((s) => safeUrl(s)).filter(Boolean), LIMITS.gallery) : [],
     email: o.kind === 'contact' ? cleanEmail(o.email) : '',
     tracks: o.kind === 'music' ? sanitizeTracks(o.body) : [],
+    entries: o.kind === 'timeline' ? sanitizeTimeline(o.body) : [],
   };
+}
+
+// one entry per line: "when | title | details (optional)"
+function sanitizeTimeline(text) {
+  return listOf(clampText(text, LIMITS.body).split('\n'), LIMITS.timeline).map((line) => {
+    const parts = line.split('|').map((p) => clampText(p, LIMITS.text).trim());
+    const title = (parts[1] || '').slice(0, LIMITS.title);
+    if (!title) return null;
+    return { when: parts[0] || '', title, detail: parts.slice(2).join(' | ') };
+  }).filter(Boolean);
 }
 
 // one track per line: "track title | https://audio url"
@@ -534,6 +545,7 @@ function openItem(os, item) {
   if (item.kind === 'contact') return openWindow(os, 'item:' + item.id, item.title, (body) => renderContact(body, item));
   if (item.kind === 'music') return openWindow(os, 'item:' + item.id, item.title, (body) => renderMusic(body, item));
   if (item.kind === 'video') return openWindow(os, 'item:' + item.id, item.title, (body) => renderVideo(body, item));
+  if (item.kind === 'timeline') return openWindow(os, 'item:' + item.id, item.title, (body) => renderTimeline(body, item));
   openWindow(os, 'item:' + item.id, item.title, (body) => {
     if (item.kind !== 'project') {
       body.append(el('pre', { class: 'notepad', text: item.body || item.description || '(empty file)' }));
@@ -562,6 +574,17 @@ function renderGallery(body, item) {
     grid.append(img);
   });
   body.append(grid);
+}
+
+// vertical timeline for resumes: jobs, school, achievements
+function renderTimeline(body, item) {
+  body.append(el('p', { class: 'project-desc', text: item.description }));
+  if (item.entries.length === 0) { body.append(el('p', { class: 'dim', text: 'no entries yet.' })); return; }
+  body.append(el('ol', { class: 'timeline' }, item.entries.map((e) => el('li', { class: 'timeline-item' },
+    el('div', { class: 'timeline-when', text: e.when }),
+    el('div', { class: 'timeline-title', text: e.title }),
+    ...(e.detail ? [el('div', { class: 'timeline-detail', text: e.detail })] : []),
+  ))));
 }
 
 // youtube links become an embed (privacy-enhanced domain). direct mp4/webm/ogg links play in a native player.
@@ -972,7 +995,7 @@ function viewItems(host) {
     el('h3', { text: 'Add item' }),
     field('Type', kind), field('Folder (text files only)', folder), field('Title', title),
     field('Description', desc), field('Tags', tags), field('Image url', image), field('Live link', link),
-    field('Body text (text, note, secret), one image url per line (gallery), or one "track title | audio url" per line (music)', body), field('Unlock command (secret files)', unlock),
+    field('Body text (text, note, secret), one image url per line (gallery), one "track | audio url" per line (music), or one "when | title | details" per line (timeline)', body), field('Unlock command (secret files)', unlock),
     field('Contact email (contact forms)', email),
     btn('Add item', () => {
       if (draft.items.length >= LIMITS.items) return flash('max 30 items');

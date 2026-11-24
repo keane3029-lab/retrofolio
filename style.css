@@ -123,3 +123,9 @@ input[type="file"]::file-selector-button { background:#22222c; color:var(--text)
 .folder-btn.on { text-decoration:underline; }
 .video-frame { width:100%; aspect-ratio:16 / 9; border:0; }
 .video-file { width:100%; }
+.timeline { list-style:none; margin:8px 0; padding:0 0 0 14px; border-left:2px solid currentColor; }
+.timeline-item { position:relative; padding:0 0 14px 12px; }
+.timeline-item::before { content:''; position:absolute; left:-20px; top:4px; width:10px; height:10px; background:currentColor; }
+.timeline-when { font-size:12px; opacity:.7; }
+.timeline-title { font-weight:700; }
+.timeline-detail { white-space:pre-wrap; margin-top:2px; }
