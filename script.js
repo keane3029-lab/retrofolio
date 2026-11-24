@@ -4,16 +4,17 @@
 const LIMITS = {
   configBytes: 100000, items: 30, commands: 50, socials: 10, tags: 8, tagLen: 24,
   title: 60, text: 300, body: 5000, bio: 500, handle: 30, osName: 40, bootText: 1200,
-  url: 300, cmdName: 24, cmdResponse: 1000, shareChars: 120000,
+  url: 300, cmdName: 24, cmdResponse: 1000, shareChars: 120000, gallery: 12,
 };
 const RESERVED = ['admin', 'api', 'studio', 'edit', 'login', 'www', 'support', 'app', 'static', 'assets', 'null', 'undefined', 'retrofolio'];
 const THEMES = ['win95', 'ubuntu', 'amber', 'mac'];
 const WALLPAPERS = ['color', 'grid', 'image'];
 const FOLDERS = ['Projects', 'About', 'Secrets'];
-const KINDS = ['project', 'text', 'secret'];
+const KINDS = ['project', 'text', 'secret', 'gallery', 'contact', 'note'];
 const SLUG_RE = /^[a-z0-9-]{3,30}$/;
 const DOMAIN_RE = /^([a-z0-9-]+\.)+[a-z]{2,}$/;
 const HEX_RE = /^#[0-9a-fA-F]{6}$/;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAIN_HOSTS = ['retrofolio.app', 'www.retrofolio.app', 'retrofolio.duckdns.org', 'localhost', '127.0.0.1'];
 const DRAFT_KEY = 'retrofolio:draft';
 const CNAME_TARGET = 'cname.retrofolio.app';
@@ -110,8 +111,9 @@ function sanitizeItem(raw) {
   const o = obj(raw);
   if (KINDS.includes(o.kind) === false) return null;
   let folder = 'Secrets';
-  if (o.kind === 'project') folder = 'Projects';
+  if (o.kind === 'project' || o.kind === 'gallery') folder = 'Projects';
   if (o.kind === 'text') folder = o.folder === 'Projects' ? 'Projects' : 'About';
+  if (o.kind === 'contact' || o.kind === 'note') folder = 'About';
   return {
     id: clampText(o.id, 40) || uid(),
     kind: o.kind,
@@ -123,7 +125,14 @@ function sanitizeItem(raw) {
     link: safeUrl(o.link),
     body: clampText(o.body, LIMITS.body),
     unlock: cmdName(o.unlock),
+    images: o.kind === 'gallery' ? listOf(clampText(o.body, LIMITS.body).split('\n').map((s) => safeUrl(s)).filter(Boolean), LIMITS.gallery) : [],
+    email: o.kind === 'contact' ? cleanEmail(o.email) : '',
   };
+}
+
+function cleanEmail(value) {
+  const s = clampText(value, 120).trim();
+  return EMAIL_RE.test(s) ? s : '';
 }
 
 // ---------- templates ----------
@@ -371,6 +380,7 @@ function renderOS(root, cfg, opts = {}) {
       iconBtn('File Explorer', () => openExplorer(os)),
       iconBtn('Terminal', () => openTerminal(os)),
       iconBtn('About Me', () => openAbout(os)),
+      iconBtn('Notes', () => openNotes(os)),
     ),
   );
   os.startMenu = el('div', { class: 'start-menu hidden' });
@@ -398,6 +408,7 @@ function fillStartMenu(os) {
   add('File Explorer', () => openExplorer(os));
   add('Terminal', () => openTerminal(os));
   add('About Me', () => openAbout(os));
+  add('Notes', () => openNotes(os));
   visibleItems(os).filter((i) => i.kind === 'project' && i.link).forEach((i) => menu.append(el('a', { href: i.link, target: '_blank', rel: 'noopener noreferrer nofollow', text: '↗ ' + i.title })));
   os.cfg.socials.forEach((s) => menu.append(el('a', { href: s.url, target: '_blank', rel: 'noopener noreferrer nofollow', text: '↗ ' + s.label })));
 }
@@ -487,6 +498,8 @@ function openExplorer(os) {
 }
 
 function openItem(os, item) {
+  if (item.kind === 'gallery') return openWindow(os, 'item:' + item.id, item.title, (body) => renderGallery(body, item));
+  if (item.kind === 'contact') return openWindow(os, 'item:' + item.id, item.title, (body) => renderContact(body, item));
   openWindow(os, 'item:' + item.id, item.title, (body) => {
     if (item.kind !== 'project') {
       body.append(el('pre', { class: 'notepad', text: item.body || item.description || '(empty file)' }));
@@ -501,6 +514,51 @@ function openItem(os, item) {
       body.append(img);
     }
     if (item.link) body.append(el('a', { class: 'btn-link', href: item.link, target: '_blank', rel: 'noopener noreferrer nofollow', text: 'open live demo ->' }));
+  });
+}
+
+function renderGallery(body, item) {
+  body.append(el('p', { class: 'project-desc', text: item.description }));
+  if (item.images.length === 0) { body.append(el('p', { class: 'dim', text: 'no pictures yet.' })); return; }
+  const grid = el('div', { class: 'gallery' });
+  item.images.forEach((src, i) => {
+    const img = el('img', { class: 'gallery-img', alt: item.title + ' ' + (i + 1), loading: 'lazy', referrerpolicy: 'no-referrer' });
+    img.addEventListener('error', () => img.remove());
+    img.src = src;
+    grid.append(img);
+  });
+  body.append(grid);
+}
+
+// no backend: the send button opens the visitor's mail app with the message filled in.
+function renderContact(body, item) {
+  body.append(el('p', { class: 'project-desc', text: item.description }));
+  if (!item.email) { body.append(el('p', { class: 'dim', text: 'no email set for this form yet.' })); return; }
+  const name = input('', { placeholder: 'your name', maxlength: '60' });
+  const message = area('', 1000);
+  body.append(
+    field('Your name', name),
+    field('Message', message),
+    btn('Send', () => {
+      const text = message.value.trim();
+      if (text === '') return flash('write a message first');
+      const who = name.value.trim();
+      const mail = 'mailto:' + item.email + '?subject=' + encodeURIComponent('portfolio: ' + item.title)
+        + '&body=' + encodeURIComponent((who ? 'from: ' + who + '\n\n' : '') + text);
+      window.location.href = mail;
+    }),
+  );
+}
+
+function openNotes(os) {
+  openWindow(os, 'notes', 'Notes', (body) => {
+    const notes = visibleItems(os).filter((i) => i.kind === 'note');
+    if (notes.length === 0) { body.append(el('p', { class: 'dim', text: 'no notes yet. add a note item in the builder.' })); return; }
+    const view = el('pre', { class: 'notepad', text: 'pick a note on the left.' });
+    const list = el('div', { class: 'folders' }, notes.map((n) => el('button', {
+      class: 'folder-btn', type: 'button', text: n.title, onclick: () => { view.textContent = n.body || '(empty note)'; },
+    })));
+    body.append(list, view);
   });
 }
 
@@ -818,21 +876,23 @@ function viewItems(host) {
   const link = input('', { placeholder: 'live link (optional)' });
   const body = area('', LIMITS.body);
   const unlock = input('', { placeholder: 'command that unlocks it (secret files)' });
+  const email = input('', { placeholder: 'email for contact forms', maxlength: '120' });
   host.append(
     el('h3', { text: 'Desktop items' }), list,
     el('h3', { text: 'Add item' }),
     field('Type', kind), field('Folder (text files only)', folder), field('Title', title),
     field('Description', desc), field('Tags', tags), field('Image url', image), field('Live link', link),
-    field('Body text (text and secret files)', body), field('Unlock command (secret files)', unlock),
+    field('Body text (text, note, secret) or one image url per line (gallery)', body), field('Unlock command (secret files)', unlock),
+    field('Contact email (contact forms)', email),
     btn('Add item', () => {
       if (draft.items.length >= LIMITS.items) return flash('max 30 items');
       const item = sanitizeItem({
         kind: kind.value, folder: folder.value, title: title.value, description: desc.value,
-        tags: tags.value.split(','), image: image.value, link: link.value, body: body.value, unlock: unlock.value,
+        tags: tags.value.split(','), image: image.value, link: link.value, body: body.value, unlock: unlock.value, email: email.value,
       });
       if (!item) return flash('pick a valid type');
       draft.items.push(item);
-      title.value = ''; desc.value = ''; tags.value = ''; image.value = ''; link.value = ''; body.value = ''; unlock.value = '';
+      title.value = ''; desc.value = ''; tags.value = ''; image.value = ''; link.value = ''; body.value = ''; unlock.value = ''; email.value = '';
       commit();
       paint();
     }),
