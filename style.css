@@ -121,3 +121,5 @@ input[type="file"]::file-selector-button { background:#22222c; color:var(--text)
 .music-now { font-family:ui-monospace, Menlo, monospace; font-size:14px; margin:8px 0; }
 .music-audio { width:100%; margin:0 0 10px; }
 .folder-btn.on { text-decoration:underline; }
+.video-frame { width:100%; aspect-ratio:16 / 9; border:0; }
+.video-file { width:100%; }

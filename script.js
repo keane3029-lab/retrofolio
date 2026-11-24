@@ -10,7 +10,7 @@ const RESERVED = ['admin', 'api', 'studio', 'edit', 'login', 'www', 'support', '
 const THEMES = ['win95', 'ubuntu', 'amber', 'mac'];
 const WALLPAPERS = ['color', 'grid', 'image'];
 const FOLDERS = ['Projects', 'About', 'Secrets'];
-const KINDS = ['project', 'text', 'secret', 'gallery', 'contact', 'note', 'music'];
+const KINDS = ['project', 'text', 'secret', 'gallery', 'contact', 'note', 'music', 'video'];
 const SLUG_RE = /^[a-z0-9-]{3,30}$/;
 const DOMAIN_RE = /^([a-z0-9-]+\.)+[a-z]{2,}$/;
 const HEX_RE = /^#[0-9a-fA-F]{6}$/;
@@ -111,7 +111,7 @@ function sanitizeItem(raw) {
   const o = obj(raw);
   if (KINDS.includes(o.kind) === false) return null;
   let folder = 'Secrets';
-  if (o.kind === 'project' || o.kind === 'gallery' || o.kind === 'music') folder = 'Projects';
+  if (o.kind === 'project' || o.kind === 'gallery' || o.kind === 'music' || o.kind === 'video') folder = 'Projects';
   if (o.kind === 'text') folder = o.folder === 'Projects' ? 'Projects' : 'About';
   if (o.kind === 'contact' || o.kind === 'note') folder = 'About';
   return {
@@ -533,6 +533,7 @@ function openItem(os, item) {
   if (item.kind === 'gallery') return openWindow(os, 'item:' + item.id, item.title, (body) => renderGallery(body, item));
   if (item.kind === 'contact') return openWindow(os, 'item:' + item.id, item.title, (body) => renderContact(body, item));
   if (item.kind === 'music') return openWindow(os, 'item:' + item.id, item.title, (body) => renderMusic(body, item));
+  if (item.kind === 'video') return openWindow(os, 'item:' + item.id, item.title, (body) => renderVideo(body, item));
   openWindow(os, 'item:' + item.id, item.title, (body) => {
     if (item.kind !== 'project') {
       body.append(el('pre', { class: 'notepad', text: item.body || item.description || '(empty file)' }));
@@ -561,6 +562,41 @@ function renderGallery(body, item) {
     grid.append(img);
   });
   body.append(grid);
+}
+
+// youtube links become an embed (privacy-enhanced domain). direct mp4/webm/ogg links play in a native player.
+const YT_ID_RE = /^[A-Za-z0-9_-]{6,20}$/;
+function youtubeId(link) {
+  try {
+    const u = new URL(link);
+    if (u.hostname === 'youtu.be') return u.pathname.slice(1).split('/')[0];
+    if (u.hostname === 'youtube.com' || u.hostname === 'www.youtube.com') {
+      if (u.pathname === '/watch') return u.searchParams.get('v') || '';
+      const m = u.pathname.match(/^\/(embed|shorts)\/([^/]+)/);
+      if (m) return m[2];
+    }
+  } catch (err) { /* not a url */ }
+  return '';
+}
+
+function renderVideo(body, item) {
+  body.append(el('p', { class: 'project-desc', text: item.description }));
+  if (!item.link) { body.append(el('p', { class: 'dim', text: 'no video link set yet.' })); return; }
+  const id = youtubeId(item.link);
+  if (YT_ID_RE.test(id)) {
+    body.append(el('iframe', {
+      class: 'video-frame', src: 'https://www.youtube-nocookie.com/embed/' + id, title: item.title,
+      allow: 'encrypted-media; picture-in-picture; clipboard-write', allowfullscreen: '', referrerpolicy: 'strict-origin-when-cross-origin',
+    }));
+    return;
+  }
+  if (/\.(mp4|webm|ogg)([?#]|$)/i.test(item.link)) {
+    const video = el('video', { class: 'video-file', controls: '', preload: 'metadata', src: item.link });
+    video.addEventListener('error', () => { video.replaceWith(el('p', { class: 'dim', text: 'could not load this video file.' })); });
+    body.append(video);
+    return;
+  }
+  body.append(el('a', { class: 'btn-link', href: item.link, target: '_blank', rel: 'noopener noreferrer nofollow', text: 'open video ->' }));
 }
 
 // audio plays only after a visitor picks a track, so nothing starts on its own.
@@ -927,7 +963,7 @@ function viewItems(host) {
   const desc = area('', LIMITS.text);
   const tags = input('', { placeholder: 'tags, comma separated' });
   const image = input('', { placeholder: 'image url (optional)' });
-  const link = input('', { placeholder: 'live link (optional)' });
+  const link = input('', { placeholder: 'live link, or youtube / mp4 link for video' });
   const body = area('', LIMITS.body);
   const unlock = input('', { placeholder: 'command that unlocks it (secret files)' });
   const email = input('', { placeholder: 'email for contact forms', maxlength: '120' });
@@ -1093,6 +1129,7 @@ async function exportStandalone() {
     `style-src '${cssHash}'`,
     'img-src https: http: data:',
     'media-src https: http: data:',
+    'frame-src https://www.youtube-nocookie.com',
     "connect-src 'none'",
     "object-src 'none'",
     "base-uri 'none'",
