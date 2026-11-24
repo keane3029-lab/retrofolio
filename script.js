@@ -596,6 +596,19 @@ function renderGallery(body, item) {
   body.append(grid);
 }
 
+// casual spam guard: one signature per site per minute, per browser. a script can still get past this.
+const GUEST_COOLDOWN_MS = 60000;
+const guestKey = (slug) => 'retrofolio:guest:' + slug;
+function guestbookWait(slug) {
+  try {
+    const last = Number(localStorage.getItem(guestKey(slug)) || 0);
+    return Math.max(0, last + GUEST_COOLDOWN_MS - Date.now());
+  } catch (err) { return 0; }
+}
+function guestbookStamp(slug) {
+  try { localStorage.setItem(guestKey(slug), String(Date.now())); } catch (err) { /* storage blocked */ }
+}
+
 // guestbook: visitors leave a message on the live site. only the owner can read them, on the publish tab.
 function renderGuestbook(body, item) {
   body.append(el('p', { class: 'project-desc', text: item.description }));
@@ -609,12 +622,15 @@ function renderGuestbook(body, item) {
     btn('Sign', async () => {
       const text = message.value.trim();
       if (text === '') return flash('write a message first');
+      const waitMs = guestbookWait(liveSlug);
+      if (waitMs > 0) return flash('wait ' + Math.ceil(waitMs / 1000) + 's before signing again');
       status.textContent = 'sending...';
       try {
         const f = await firebaseApp();
         await f.fs.addDoc(f.fs.collection(f.db, 'guestbook', liveSlug, 'entries'), {
           name: name.value.trim().slice(0, 60), message: text.slice(0, 500), createdAt: f.fs.serverTimestamp(),
         });
+        guestbookStamp(liveSlug);
         message.value = ''; name.value = '';
         status.textContent = 'thanks, your message is in.';
       } catch (err) {
