@@ -134,3 +134,4 @@ input[type="file"]::file-selector-button { background:#22222c; color:var(--text)
 .card-img { width:100%; height:auto; border:1px solid var(--rule); }
 .card-title { background:none; border:0; padding:0; color:inherit; font:inherit; font-weight:700; text-align:left; cursor:pointer; }
 .card-desc { font-size:13px; white-space:pre-wrap; }
+.site-like { position:fixed; right:12px; bottom:12px; z-index:50; background:none; color:inherit; border:1px solid currentColor; padding:4px 10px; font:inherit; font-size:13px; cursor:pointer; }

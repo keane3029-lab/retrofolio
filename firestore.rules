@@ -102,5 +102,23 @@ service cloud.firestore {
         && exists(/databases/$(database)/documents/sites/$(slug))
         && get(/databases/$(database)/documents/sites/$(slug)).data.ownerUid == request.auth.uid;
     }
+
+    match /likes/{slug} {
+      // only the owner of the site can read its like count.
+      allow read: if signedIn()
+        && exists(/databases/$(database)/documents/sites/$(slug))
+        && get(/databases/$(database)/documents/sites/$(slug)).data.ownerUid == request.auth.uid;
+
+      // anyone can start a count at 1, but only for a site that is published.
+      allow create: if request.resource.data.count == 1
+        && request.resource.data.keys().hasOnly(['count'])
+        && exists(/databases/$(database)/documents/sites/$(slug))
+        && get(/databases/$(database)/documents/sites/$(slug)).data.published == true;
+
+      // likes only go up by exactly 1 per write. there is no unlike.
+      allow update: if request.resource.data.count == resource.data.count + 1
+        && request.resource.data.keys().hasOnly(['count'])
+        && get(/databases/$(database)/documents/sites/$(slug)).data.published == true;
+    }
   }
 }

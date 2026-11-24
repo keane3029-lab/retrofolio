@@ -380,6 +380,45 @@ async function getViews(slug) {
   return snap.exists() ? snap.data().count : 0;
 }
 
+// likes: one per browser per site (stored locally), counted the same way as views. only the owner reads the total.
+async function countLike(slug) {
+  const f = await firebaseApp();
+  const ref = f.fs.doc(f.db, 'likes', slug);
+  try {
+    await f.fs.updateDoc(ref, { count: f.fs.increment(1) });
+  } catch (err) {
+    // no doc yet, so this first like starts the count. a rejected write (unpublished site) throws to the caller.
+    await f.fs.setDoc(ref, { count: 1 });
+  }
+}
+
+async function getLikes(slug) {
+  const f = await firebaseApp();
+  const snap = await f.fs.getDoc(f.fs.doc(f.db, 'likes', slug));
+  return snap.exists() ? snap.data().count : 0;
+}
+
+// the like button sits in the corner of every live site. visitors see only their own state.
+function addLikeButton() {
+  if (!liveSlug) return;
+  const key = 'retrofolio:liked:' + liveSlug;
+  let liked = false;
+  try { liked = localStorage.getItem(key) === '1'; } catch (err) { /* storage blocked */ }
+  const button = el('button', { class: 'site-like', type: 'button', text: liked ? '♥ liked' : '♡ like' });
+  button.addEventListener('click', async () => {
+    if (liked) return;
+    liked = true;
+    button.textContent = '♥ liked';
+    try { localStorage.setItem(key, '1'); } catch (err) { /* storage blocked */ }
+    try {
+      await countLike(liveSlug);
+    } catch (err) {
+      console.warn('like not counted', err && err.code || err);
+    }
+  });
+  ui.viewer.append(button);
+}
+
 async function loadByDomain(host) {
   const f = await firebaseApp();
   const snap = await f.fs.getDoc(f.fs.doc(f.db, 'domains', host));
@@ -1184,7 +1223,7 @@ function viewPublish(host) {
       if (slugs.length === 0) { mySitesBox.append(el('p', { class: 'dim', text: 'no published sites yet.' })); return; }
       for (const slug of slugs) {
         const views = el('span', { class: 'dim', text: '' });
-        getViews(slug).then((n) => { views.textContent = ' · ' + n + ' views'; }).catch(() => {});
+        Promise.all([getViews(slug), getLikes(slug)]).then(([n, l]) => { views.textContent = ' · ' + n + ' views · ' + l + ' likes'; }).catch(() => {});
         mySitesBox.append(el('div', { class: 'row' },
           el('span', {}, el('span', { text: '/' + slug }), views),
           el('span', { class: 'row-wrap' },
@@ -1327,6 +1366,7 @@ async function showViewer(loader) {
       return;
     }
     renderOS(ui.viewer, cfg, { boot: true });
+    addLikeButton();
   } catch (err) {
     ui.viewer.textContent = 'could not load: ' + err.message;
   }
