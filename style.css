@@ -116,3 +116,8 @@ input[type="file"]::file-selector-button { background:#22222c; color:var(--text)
 }
 .gallery { display:grid; grid-template-columns:repeat(auto-fill,minmax(120px,1fr)); gap:8px; }
 .gallery-img { width:100%; height:auto; border:1px solid var(--rule); }
+
+/* music window */
+.music-now { font-family:ui-monospace, Menlo, monospace; font-size:14px; margin:8px 0; }
+.music-audio { width:100%; margin:0 0 10px; }
+.folder-btn.on { text-decoration:underline; }
