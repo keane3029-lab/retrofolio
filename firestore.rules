@@ -50,7 +50,8 @@ service cloud.firestore {
         && request.resource.data.verified == false
         && domain.matches('^([a-z0-9-]+[.])+[a-z]{2,}$')
         && domain.matches('(^|.*[.])retrofolio[.]app$') == false
-        && request.resource.data.keys().hasOnly(domainKeys());
+        && request.resource.data.keys().hasOnly(domainKeys())
+        && exists(/databases/$(database)/documents/sites/$(request.resource.data.slug)) && get(/databases/$(database)/documents/sites/$(request.resource.data.slug)).data.ownerUid == request.auth.uid;
 
       // no flipping verified from the client, and no rebinding a verified domain.
       allow update: if signedIn()
@@ -58,7 +59,8 @@ service cloud.firestore {
         && request.resource.data.ownerUid == request.auth.uid
         && resource.data.verified == false
         && request.resource.data.verified == false
-        && request.resource.data.keys().hasOnly(domainKeys());
+        && request.resource.data.keys().hasOnly(domainKeys())
+        && exists(/databases/$(database)/documents/sites/$(request.resource.data.slug)) && get(/databases/$(database)/documents/sites/$(request.resource.data.slug)).data.ownerUid == request.auth.uid;
 
       allow delete: if signedIn() && resource.data.ownerUid == request.auth.uid;
     }

@@ -32,6 +32,9 @@ module.exports = async (req, res) => {
   if (snap.exists === false) return res.status(404).json({ error: 'bind the domain first' });
   const data = snap.data();
   if (data.ownerUid !== uid) return res.status(403).json({ error: 'not your domain' });
+  // the domain can only point at a site this user owns
+  const site = await db.doc('sites/' + data.slug).get();
+  if (site.exists === false || site.data().ownerUid !== uid) return res.status(403).json({ error: 'not your site' });
 
   // 3. check the txt record for the ownership token
   let records = [];

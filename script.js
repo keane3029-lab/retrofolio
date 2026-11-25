@@ -14,7 +14,7 @@ const KINDS = ['project', 'text', 'secret', 'gallery', 'contact', 'note', 'music
 const SLUG_RE = /^[a-z0-9-]{3,30}$/;
 const DOMAIN_RE = /^([a-z0-9-]+\.)+[a-z]{2,}$/;
 const HEX_RE = /^#[0-9a-fA-F]{6}$/;
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const EMAIL_RE = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$/;
 const MAIN_HOSTS = ['retrofolio.app', 'www.retrofolio.app', 'retrofolio.duckdns.org', 'localhost', '127.0.0.1'];
 const DRAFT_KEY = 'retrofolio:draft';
 const CNAME_TARGET = 'cname.retrofolio.app';
@@ -261,11 +261,10 @@ async function firebaseApp() {
   if (fbCache) return fbCache;
   if (FIREBASE_CONFIG.apiKey === 'PASTE_ME') throw new Error('firebase not set up yet. paste your config into FIREBASE_CONFIG in script.js');
   const base = `https://www.gstatic.com/firebasejs/${FB_VERSION}/`;
-  const [appMod, authMod, fsMod, fnMod] = await Promise.all([
+  const [appMod, authMod, fsMod] = await Promise.all([
     import(`${base}firebase-app.js`),
     import(`${base}firebase-auth.js`),
     import(`${base}firebase-firestore.js`),
-    import(`${base}firebase-functions.js`),
   ]);
   const app = appMod.initializeApp(FIREBASE_CONFIG);
   fbCache = {
@@ -273,8 +272,6 @@ async function firebaseApp() {
     auth: authMod.getAuth(app),
     db: fsMod.getFirestore(app),
     fs: fsMod,
-    functions: fnMod.getFunctions(app),
-    fn: fnMod,
   };
   return fbCache;
 }
@@ -309,6 +306,8 @@ async function bindDomain(rawDomain, rawSlug) {
   if (DOMAIN_RE.test(domain) === false) throw new Error('that does not look like a domain');
   if (domain === 'retrofolio.app' || domain.endsWith('.retrofolio.app')) throw new Error('retrofolio subdomains come from handles, not custom domains');
   if (SLUG_RE.test(slug) === false) throw new Error('publish your handle first');
+  const siteSnap = await f.fs.getDoc(f.fs.doc(f.db, 'sites', slug));
+  if (siteSnap.exists() === false || siteSnap.data().ownerUid !== user.uid) throw new Error('that handle is not yours');
   const ref = f.fs.doc(f.db, 'domains', domain);
   const snap = await f.fs.getDoc(ref);
   if (snap.exists() && snap.data().ownerUid !== user.uid) throw new Error('that domain is already claimed');
