@@ -1160,7 +1160,7 @@ function viewItems(host) {
     el('h3', { text: 'Add item' }),
     field('Type', kind), field('Folder (text files only)', folder), field('Title', title),
     field('Description', desc), field('Tags', tags), field('Image url', image), field('Live link', link),
-    field('Body text (text, note, secret), one image url per line (gallery), one "track | audio url" per line (music), or one "when | title | details" per line (timeline)', body), field('Unlock command (secret files)', unlock),
+    field('Body text (text, note, secret), one image url per line (gallery), one "track | audio url" per line (music), or one "when | title | details" per line (timeline)', body), field('Unlock command (secret files). heads up: secrets are hidden in the interface, not private. anyone who inspects the page can read them.', unlock),
     field('Contact email (contact forms)', email),
     btn('Add item', () => {
       if (draft.items.length >= LIMITS.items) return flash('max 30 items');
