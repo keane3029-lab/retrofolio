@@ -1,0 +1,22 @@
+# secrets: never commit keys
+.env
+.env.*
+.env*.local
+
+# vercel local state
+.vercel
+
+# dependencies
+node_modules/
+
+# logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS and editor junk
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp

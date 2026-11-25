@@ -1,0 +1,12 @@
+# secrets: keep local env files out of every deploy
+.env
+.env.*
+.env*.local
+
+# repo and dev-only files, not part of the site
+.git
+.gitignore
+.vercelignore
+.vercel
+node_modules
+CLAUDE.md
