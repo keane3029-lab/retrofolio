@@ -19,6 +19,7 @@ const MAIN_HOSTS = ['retrofolio.app', 'www.retrofolio.app', 'retrofolio.duckdns.
 const DRAFT_KEY = 'retrofolio:draft';
 const CNAME_TARGET = 'cname.retrofolio.app';
 const FB_VERSION = '10.12.2';
+const APP_CHECK_SITE_KEY = '6LdTvjEuAAAAAPUhspYVP5iSu1dLt-v1LNuvrI6t';  // reCAPTCHA Enterprise (Fraud Defense) site key, public
 const GRID_BG = 'linear-gradient(rgba(255,255,255,.08) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.08) 1px, transparent 1px)';
 // paste your firebase web config here. these values are public, security comes from the rules.
 const FIREBASE_CONFIG = { apiKey: 'AIzaSyC6kKX4V5MgeDsDzH9lQjGUZtQXh1wMqHQ', authDomain: 'retrofolio-46409.firebaseapp.com', projectId: 'retrofolio-46409', appId: '1:448603644178:web:ced27a6e348b12092c53cb' };
@@ -261,12 +262,18 @@ async function firebaseApp() {
   if (fbCache) return fbCache;
   if (FIREBASE_CONFIG.apiKey === 'PASTE_ME') throw new Error('firebase not set up yet. paste your config into FIREBASE_CONFIG in script.js');
   const base = `https://www.gstatic.com/firebasejs/${FB_VERSION}/`;
-  const [appMod, authMod, fsMod] = await Promise.all([
+  const [appMod, authMod, fsMod, checkMod] = await Promise.all([
     import(`${base}firebase-app.js`),
     import(`${base}firebase-auth.js`),
     import(`${base}firebase-firestore.js`),
+    import(`${base}firebase-app-check.js`),
   ]);
   const app = appMod.initializeApp(FIREBASE_CONFIG);
+  // app check goes on before any firestore or auth call so every request carries a token
+  checkMod.initializeAppCheck(app, {
+    provider: new checkMod.ReCaptchaEnterpriseProvider(APP_CHECK_SITE_KEY),
+    isTokenAutoRefreshEnabled: true,
+  });
   fbCache = {
     authMod,
     auth: authMod.getAuth(app),
