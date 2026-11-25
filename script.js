@@ -340,6 +340,21 @@ async function verifyDomain(domain) {
   return body.verified === true;
 }
 
+// asks the server for timeline lines. returns an array of "when | title | details" strings.
+async function draftTimeline(prompt) {
+  const f = await firebaseApp();
+  const user = requireUser(f);
+  const idToken = await user.getIdToken();
+  const res = await fetch('/api/generate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + idToken },
+    body: JSON.stringify({ prompt }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (res.ok === false) throw new Error(data.error || 'draft failed');
+  return Array.isArray(data.lines) ? data.lines : [];
+}
+
 let liveSlug = '';
 
 async function loadBySlug(slug) {
@@ -1155,8 +1170,30 @@ function viewItems(host) {
   const body = area('', LIMITS.body);
   const unlock = input('', { placeholder: 'command that unlocks it (secret files)' });
   const email = input('', { placeholder: 'email for contact forms', maxlength: '120' });
+  // drafts fill the form below for review. nothing is added until "Add item" is pressed.
+  const draftPrompt = input('', { placeholder: 'who is this portfolio for, e.g. a nurse with 8 years in ICU', maxlength: '500' });
+  const draftBtn = btn('Draft timeline', async () => {
+    const prompt = draftPrompt.value.trim();
+    if (prompt.length < 3) return flash('describe the portfolio owner first');
+    draftBtn.disabled = true;
+    try {
+      const lines = await draftTimeline(prompt);
+      if (lines.length === 0) return flash('no draft came back, try a longer description');
+      kind.value = 'timeline';
+      folder.value = 'About';
+      if (title.value.trim() === '') title.value = 'Timeline';
+      body.value = lines.join('\n');
+      flash('draft ready. check it, then press Add item.');
+    } catch (err) {
+      flash(err.message);
+    } finally {
+      draftBtn.disabled = false;
+    }
+  });
   host.append(
     el('h3', { text: 'Desktop items' }), list,
+    el('h3', { text: 'Draft a timeline with AI' }),
+    field('Describe the portfolio owner', draftPrompt), draftBtn,
     el('h3', { text: 'Add item' }),
     field('Type', kind), field('Folder (text files only)', folder), field('Title', title),
     field('Description', desc), field('Tags', tags), field('Image url', image), field('Live link', link),
