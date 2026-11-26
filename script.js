@@ -260,7 +260,10 @@ function decodeShare(raw) {
 let fbCache = null;
 async function firebaseApp() {
   if (fbCache) return fbCache;
-  if (FIREBASE_CONFIG.apiKey === 'PASTE_ME') throw new Error('firebase not set up yet. paste your config into FIREBASE_CONFIG in script.js');
+  // the api key comes from /api/config (vercel env var FIREBASE_API_KEY), not from this file
+  const cfgRes = await fetch('/api/config');
+  const cfgBody = await cfgRes.json().catch(() => ({}));
+  if (cfgRes.ok === false || !cfgBody.apiKey) throw new Error('firebase not set up yet');
   const base = `https://www.gstatic.com/firebasejs/${FB_VERSION}/`;
   const [appMod, authMod, fsMod, checkMod] = await Promise.all([
     import(`${base}firebase-app.js`),
@@ -268,7 +271,7 @@ async function firebaseApp() {
     import(`${base}firebase-firestore.js`),
     import(`${base}firebase-app-check.js`),
   ]);
-  const app = appMod.initializeApp(FIREBASE_CONFIG);
+  const app = appMod.initializeApp({ ...FIREBASE_CONFIG, apiKey: cfgBody.apiKey });
   // app check goes on before any firestore or auth call so every request carries a token
   checkMod.initializeAppCheck(app, {
     provider: new checkMod.ReCaptchaEnterpriseProvider(APP_CHECK_SITE_KEY),
