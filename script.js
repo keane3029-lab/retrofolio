@@ -1005,9 +1005,14 @@ function startBuilder() {
   $('#login-btn').addEventListener('click', async () => {
     try {
       const f = await firebaseApp();
-      await f.authMod.signInWithPopup(f.auth, new f.authMod.GoogleAuthProvider());
+      // redirect instead of popup: popups fail when the browser blocks storage between this site and firebaseapp.com
+      await f.authMod.signInWithRedirect(f.auth, new f.authMod.GoogleAuthProvider());
     } catch (err) { flash(err.message); }
   });
+  // finish a sign-in that just came back from google
+  firebaseApp()
+    .then((f) => f.authMod.getRedirectResult(f.auth))
+    .catch((err) => { if (err && err.message) flash(err.message); });
   watchAuth();
   renderTabs();
   renderBody();
