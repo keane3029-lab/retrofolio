@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/__/auth/:path*",
+      "destination": "https://retrofolio-46409.firebaseapp.com/__/auth/:path*"
+    },
+    {
       "source": "/(studio|edit)",
       "destination": "/studio.html"
     },

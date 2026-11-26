@@ -22,7 +22,8 @@ const FB_VERSION = '10.12.2';
 const APP_CHECK_SITE_KEY = '6LdTvjEuAAAAAPUhspYVP5iSu1dLt-v1LNuvrI6t';  // reCAPTCHA Enterprise (Fraud Defense) site key, public
 const GRID_BG = 'linear-gradient(rgba(255,255,255,.08) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.08) 1px, transparent 1px)';
 // paste your firebase web config here. these values are public, security comes from the rules.
-const FIREBASE_CONFIG = {  authDomain: 'retrofolio-46409.firebaseapp.com', projectId: 'retrofolio-46409', appId: '1:448603644178:web:ced27a6e348b12092c53cb' };
+// auth runs on this site's own domain (proxied to firebase in vercel.json) so chrome doesn't block the sign-in storage
+const FIREBASE_CONFIG = {  authDomain: 'retrofolio.duckdns.org', projectId: 'retrofolio-46409', appId: '1:448603644178:web:ced27a6e348b12092c53cb' };
 
 // ---------- helpers ----------
 const $ = (sel, root = document) => root.querySelector(sel);
