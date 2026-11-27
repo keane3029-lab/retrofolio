@@ -2,14 +2,8 @@
 // the key only lives in the GEMINI_API_KEY env var. it is never sent to the browser or echoed in errors.
 const admin = require('firebase-admin');
 
-if (admin.apps.length === 0) {
-  admin.initializeApp({
-    credential: admin.credential.cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)),
-  });
-}
-const db = admin.firestore();
-
 const DAILY_LIMIT = 10; // generations per user per day, failed tries count too
+const GLOBAL_DAILY_LIMIT = 300; // all users together per day, so making lots of accounts can't run up the bill
 const MAX_PROMPT = 500;
 const MAX_ENTRIES = 15;
 const MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
@@ -29,6 +23,19 @@ const clean = (value, max) =>
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, max);
+
+// starts firebase admin on first use. a missing or broken service account gives null, not a crash at load.
+function getDb() {
+  if (admin.apps.length === 0) {
+    try {
+      const account = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT || '');
+      admin.initializeApp({ credential: admin.credential.cert(account) });
+    } catch (err) {
+      return null;
+    }
+  }
+  return admin.firestore();
+}
 
 function parseEntries(text) {
   const parsed = JSON.parse(text);
@@ -76,6 +83,9 @@ module.exports = async (req, res) => {
   if (req.method === 'OPTIONS') return res.status(204).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'post only' });
 
+  const db = getDb();
+  if (!db) return res.status(500).json({ error: 'server is not set up yet' });
+
   // 1. who is calling
   const token = (req.headers.authorization || '').replace('Bearer ', '');
   let uid;
@@ -90,14 +100,18 @@ module.exports = async (req, res) => {
   if (prompt.length < 3) return res.status(400).json({ error: 'say a bit more about the portfolio' });
   if (!process.env.GEMINI_API_KEY) return res.status(500).json({ error: 'drafting is not set up yet' });
 
-  // 3. daily limit, counted before the call so failed tries still cost a slot
-  const day = new Date().toISOString().slice(0, 10);
+  // 3. per-user and global daily limits, counted before the call so failed tries still cost a slot.
+  // the day is philippine time, so the reset lands at midnight local.
+  const day = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
   const usageRef = db.doc(`usage/${uid}_${day}`);
+  const globalRef = db.doc(`usage/_all_${day}`);
   const allowed = await db.runTransaction(async (tx) => {
-    const snap = await tx.get(usageRef);
+    const [snap, gsnap] = await Promise.all([tx.get(usageRef), tx.get(globalRef)]);
     const count = snap.exists ? snap.data().count || 0 : 0;
-    if (count >= DAILY_LIMIT) return false;
+    const total = gsnap.exists ? gsnap.data().count || 0 : 0;
+    if (count >= DAILY_LIMIT || total >= GLOBAL_DAILY_LIMIT) return false;
     tx.set(usageRef, { count: count + 1, uid, day });
+    tx.set(globalRef, { count: total + 1, day });
     return true;
   });
   if (!allowed) return res.status(429).json({ error: 'daily drafts used up, try again tomorrow' });

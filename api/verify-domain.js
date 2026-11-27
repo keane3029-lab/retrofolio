@@ -2,18 +2,28 @@
 const dns = require('node:dns').promises;
 const admin = require('firebase-admin');
 
-if (admin.apps.length === 0) {
-  admin.initializeApp({
-    credential: admin.credential.cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)),
-  });
-}
-const db = admin.firestore();
 const DOMAIN_RE = /^([a-z0-9-]+\.)+[a-z]{2,}$/;
+
+// starts firebase admin on first use. a missing or broken service account gives null, not a crash at load.
+function getDb() {
+  if (admin.apps.length === 0) {
+    try {
+      const account = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT || '');
+      admin.initializeApp({ credential: admin.credential.cert(account) });
+    } catch (err) {
+      return null;
+    }
+  }
+  return admin.firestore();
+}
 
 module.exports = async (req, res) => {
   res.setHeader('Content-Type', 'application/json');
   if (req.method === 'OPTIONS') return res.status(204).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'post only' });
+
+  const db = getDb();
+  if (!db) return res.status(500).json({ error: 'server is not set up yet' });
 
   // 1. who is calling
   const token = (req.headers.authorization || '').replace('Bearer ', '');

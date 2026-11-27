@@ -4,10 +4,11 @@
 const LIMITS = {
   configBytes: 100000, items: 30, commands: 50, socials: 10, tags: 8, tagLen: 24,
   title: 60, text: 300, body: 5000, bio: 500, handle: 30, osName: 40, bootText: 1200,
-  url: 300, cmdName: 24, cmdResponse: 1000, shareChars: 120000, gallery: 12, tracks: 12, timeline: 15,
+  url: 300, cmdName: 24, cmdResponse: 1000, shareChars: 140000, gallery: 12, tracks: 12, timeline: 15,
 };
 const RESERVED = ['admin', 'api', 'studio', 'edit', 'login', 'www', 'support', 'app', 'static', 'assets', 'null', 'undefined', 'retrofolio'];
 const THEMES = ['win95', 'ubuntu', 'amber', 'mac'];
+const BUILTIN_CMDS = ['help', 'ls', 'cat', 'whoami', 'theme', 'clear']; // these always win in the terminal, so they can't unlock secrets
 const WALLPAPERS = ['color', 'grid', 'image'];
 const FOLDERS = ['Projects', 'About', 'Secrets'];
 const KINDS = ['project', 'text', 'secret', 'gallery', 'contact', 'note', 'music', 'video', 'timeline', 'projects', 'guestbook'];
@@ -259,8 +260,17 @@ function decodeShare(raw) {
 }
 
 let fbCache = null;
-async function firebaseApp() {
-  if (fbCache) return fbCache;
+let fbPending = null;
+// one shared init, cached as a promise so parallel callers can't run initializeApp / initializeAppCheck twice
+function firebaseApp() {
+  if (fbCache) return Promise.resolve(fbCache);
+  if (!fbPending) {
+    fbPending = initFirebase().then((f) => { fbCache = f; return f; }, (err) => { fbPending = null; throw err; });
+  }
+  return fbPending;
+}
+
+async function initFirebase() {
   // the api key comes from /api/config (vercel env var FIREBASE_API_KEY), not from this file
   const cfgRes = await fetch('/api/config');
   const cfgBody = await cfgRes.json().catch(() => ({}));
@@ -360,6 +370,7 @@ async function draftTimeline(prompt) {
 }
 
 let liveSlug = '';
+let liveOwner = '';
 
 async function loadBySlug(slug) {
   if (SLUG_RE.test(slug) === false) return null;
@@ -367,6 +378,7 @@ async function loadBySlug(slug) {
   const f = await firebaseApp();
   const snap = await f.fs.getDoc(f.fs.doc(f.db, 'sites', slug));
   if (snap.exists() === false || snap.data().published !== true) return null;
+  liveOwner = snap.data().ownerUid || '';
   const cfg = sanitizeConfig(JSON.parse(snap.data().config));
   // count once per tab session so refreshes don't inflate the number
   const key = 'retrofolio:viewed:' + slug;
@@ -394,7 +406,12 @@ async function countView(slug) {
     await f.fs.updateDoc(ref, { count: f.fs.increment(1) });
   } catch (err) {
     // the rules reject updates to a missing doc, so this first view starts the count.
-    await f.fs.setDoc(ref, { count: 1 });
+    // if another visitor created it a moment ago, the create fails, so retry the increment once.
+    try {
+      await f.fs.setDoc(ref, { count: 1 });
+    } catch (err2) {
+      await f.fs.updateDoc(ref, { count: f.fs.increment(1) });
+    }
   }
 }
 
@@ -408,12 +425,20 @@ async function getViews(slug) {
 // likes: one per browser per site (stored locally), counted the same way as views. only the owner reads the total.
 async function countLike(slug) {
   const f = await firebaseApp();
+  // same rule as views: the owner's own likes don't count
+  if (typeof f.auth.authStateReady === 'function') await f.auth.authStateReady();
+  if (f.auth.currentUser && f.auth.currentUser.uid === liveOwner) return;
   const ref = f.fs.doc(f.db, 'likes', slug);
   try {
     await f.fs.updateDoc(ref, { count: f.fs.increment(1) });
   } catch (err) {
     // no doc yet, so this first like starts the count. a rejected write (unpublished site) throws to the caller.
-    await f.fs.setDoc(ref, { count: 1 });
+    // if another visitor created it a moment ago, retry the increment once.
+    try {
+      await f.fs.setDoc(ref, { count: 1 });
+    } catch (err2) {
+      await f.fs.updateDoc(ref, { count: f.fs.increment(1) });
+    }
   }
 }
 
@@ -617,7 +642,12 @@ function openExplorer(os) {
       class: 'folder-btn', type: 'button', text: name, onclick: () => { current = name; paint(); },
     })));
     body.append(folders, crumb, grid);
-    os.root.addEventListener('unlock', paint);
+    // one unlock listener per desktop, pointed at whichever explorer window is open now
+    os.explorerPaint = paint;
+    if (!os.unlockListening) {
+      os.root.addEventListener('unlock', () => { if (os.explorerPaint) os.explorerPaint(); });
+      os.unlockListening = true;
+    }
     paint();
   });
 }
@@ -984,10 +1014,17 @@ function commit() {
 }
 
 function loadDraft() {
+  let raw = null;
+  try { raw = localStorage.getItem(DRAFT_KEY); } catch (err) { return null; }
+  if (!raw) return null;
   try {
-    const raw = localStorage.getItem(DRAFT_KEY);
-    return raw ? sanitizeConfig(JSON.parse(raw)) : null;
-  } catch (err) { return null; }
+    return sanitizeConfig(JSON.parse(raw));
+  } catch (err) {
+    // keep the unreadable draft in a backup key so the next autosave doesn't overwrite it
+    try { localStorage.setItem(DRAFT_KEY + ':backup', raw); } catch (e2) { /* storage blocked */ }
+    flash('saved draft could not be read, kept a backup');
+    return null;
+  }
 }
 
 function startBuilder() {
@@ -1210,11 +1247,14 @@ function viewItems(host) {
     field('Contact email (contact forms)', email),
     btn('Add item', () => {
       if (draft.items.length >= LIMITS.items) return flash('max 30 items');
+      if (BUILTIN_CMDS.includes(cmdName(unlock.value))) return flash('that unlock name is a built-in command. pick another');
       const item = sanitizeItem({
         kind: kind.value, folder: folder.value, title: title.value, description: desc.value,
         tags: tags.value.split(','), image: image.value, link: link.value, body: body.value, unlock: unlock.value, email: email.value,
       });
       if (!item) return flash('pick a valid type');
+      // the whole desktop has to fit under the 100 KB cap, or every later edit and publish fails
+      if (JSON.stringify({ ...draft, items: [...draft.items, item] }).length > LIMITS.configBytes) return flash('too big: the whole desktop must fit in 100 KB');
       draft.items.push(item);
       title.value = ''; desc.value = ''; tags.value = ''; image.value = ''; link.value = ''; body.value = ''; unlock.value = ''; email.value = '';
       commit();
@@ -1280,6 +1320,7 @@ function viewPublish(host) {
           el('span', {}, el('span', { text: '/' + slug }), views),
           el('span', { class: 'row-wrap' },
             btn('Edit', async () => {
+              if (confirm('replace your current draft with /' + slug + '? unsaved edits get lost.') === false) return;
               try {
                 draft = await loadMySite(slug);
                 commit();

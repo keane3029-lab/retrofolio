@@ -15,7 +15,7 @@
   ],
   "headers": [
     {
-      "source": "/(.*)",
+      "source": "/((?!__/auth/).*)",
       "headers": [
         {
           "key": "X-Content-Type-Options",
