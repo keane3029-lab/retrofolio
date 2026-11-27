@@ -330,7 +330,13 @@ async function bindDomain(rawDomain, rawSlug) {
   const siteSnap = await f.fs.getDoc(f.fs.doc(f.db, 'sites', slug));
   if (siteSnap.exists() === false || siteSnap.data().ownerUid !== user.uid) throw new Error('that handle is not yours');
   const ref = f.fs.doc(f.db, 'domains', domain);
-  const snap = await f.fs.getDoc(ref);
+  // other people's domain records are unreadable now, so a refused read means the domain is taken
+  let snap;
+  try {
+    snap = await f.fs.getDoc(ref);
+  } catch (err) {
+    throw new Error('that domain is already claimed');
+  }
   if (snap.exists() && snap.data().ownerUid !== user.uid) throw new Error('that domain is already claimed');
   if (snap.exists() && snap.data().verified === true) throw new Error('already verified and live');
   const token = randomToken();
@@ -471,9 +477,22 @@ function addLikeButton() {
 
 async function loadByDomain(host) {
   const f = await firebaseApp();
-  const snap = await f.fs.getDoc(f.fs.doc(f.db, 'domains', host));
-  if (snap.exists() === false || snap.data().verified !== true) return null;
-  return loadBySlug(snap.data().slug);
+  // public map written by the server when a domain verifies. it holds only the slug.
+  let slug = null;
+  try {
+    const hosts = await f.fs.getDoc(f.fs.doc(f.db, 'hosts', host));
+    if (hosts.exists()) slug = hosts.data().slug || null;
+  } catch (err) { /* fall through to the older lookup */ }
+  // domains bound before the hosts map existed: read the record directly. once the rules lock domains
+  // to their owner this read is refused for visitors, and the catch returns null.
+  if (!slug) {
+    try {
+      const snap = await f.fs.getDoc(f.fs.doc(f.db, 'domains', host));
+      if (snap.exists() && snap.data().verified === true) slug = snap.data().slug || null;
+    } catch (err) { return null; }
+  }
+  if (!slug) return null;
+  return loadBySlug(slug);
 }
 
 // every site this account owns. the rules allow this query because each result matches ownerUid == your uid.

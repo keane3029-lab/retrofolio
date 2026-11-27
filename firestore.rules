@@ -39,10 +39,9 @@ service cloud.firestore {
     }
 
     match /domains/{domain} {
-      // only verified domains are public. owners can see their pending ones.
-      allow read: if resource == null
-        || resource.data.verified == true
-        || (signedIn() && resource.data.ownerUid == request.auth.uid);
+      // owner only. the record holds ownerUid and the verify token, so the public never reads it.
+      // visitors get the slug from hosts/{domain} instead.
+      allow read: if signedIn() && resource.data.ownerUid == request.auth.uid;
 
       // clients can only bind a fresh, unverified domain. verification happens in the cloud function (admin sdk).
       allow create: if signedIn()
@@ -63,6 +62,12 @@ service cloud.firestore {
         && exists(/databases/$(database)/documents/sites/$(request.resource.data.slug)) && get(/databases/$(database)/documents/sites/$(request.resource.data.slug)).data.ownerUid == request.auth.uid;
 
       allow delete: if signedIn() && resource.data.ownerUid == request.auth.uid;
+    }
+
+    match /hosts/{domain} {
+      // public map of verified custom domain -> site slug. only the server (admin sdk) writes it.
+      allow read: if true;
+      allow write: if false;
     }
 
     match /views/{slug} {

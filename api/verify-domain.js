@@ -57,7 +57,8 @@ module.exports = async (req, res) => {
     return res.status(200).json({ verified: false });
   }
 
-  // 4. only the server can flip this
+  // 4. only the server can flip this, and only the server writes the public host map (slug only, no owner or token)
   await ref.update({ verified: true, verifiedAt: new Date() });
+  await db.doc('hosts/' + domain).set({ slug: data.slug, verified: true });
   return res.status(200).json({ verified: true });
 };
