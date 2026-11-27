@@ -338,7 +338,8 @@ async function bindDomain(rawDomain, rawSlug) {
     throw new Error('that domain is already claimed');
   }
   if (snap.exists() && snap.data().ownerUid !== user.uid) throw new Error('that domain is already claimed');
-  if (snap.exists() && snap.data().verified === true) throw new Error('already verified and live');
+  // already live and yours: hand back the existing record so Verify runs again and the server writes the hosts map
+  if (snap.exists() && snap.data().verified === true) return { domain, token: snap.data().token, verified: true };
   const token = randomToken();
   await f.fs.setDoc(ref, {
     ownerUid: user.uid, slug, verified: false, token, createdAt: f.fs.serverTimestamp(),
