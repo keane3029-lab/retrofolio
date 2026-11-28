@@ -81,6 +81,7 @@ function sanitizeConfig(input) {
     theme: THEMES.includes(src.theme) ? src.theme : 'ubuntu',
     crt: src.crt === true,
     wallpaper: sanitizeWallpaper(src.wallpaper),
+    shader: sanitizeShader(src.shader),
     socials: listOf(src.socials, LIMITS.socials).map(sanitizeSocial).filter(Boolean),
     items: listOf(src.items, LIMITS.items).map(sanitizeItem).filter(Boolean),
     commands: listOf(src.commands, LIMITS.commands).map(sanitizeCommand).filter(Boolean),
@@ -514,6 +515,235 @@ async function loadMySite(slug) {
   return sanitizeConfig(JSON.parse(snap.data().config));
 }
 
+// ---------- .rfs shaders (spec: rfs-format README) ----------
+const RFS_MAX_BYTES = 5 * 1024;
+const RFS_SECTIONS = ['meta', 'uniforms', 'target', 'fragment'];
+const RFS_RESERVED = ['time', 'resolution'];
+const RFS_KEY_RE = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
+const RFS_NAME_RE = /^[a-z0-9-]{1,40}$/;
+const RFS_NUM_RE = /^-?\d+(\.\d+)?$/;
+const RFS_WINDOW_RE = /^window:[a-z0-9-]+$/;
+const RFS_MAIN_RE = /void\s+main\s*\(\s*\)/;
+const RFS_TEXTURE_RE = /\btexture(2D|Cube)?\s*\(/;
+const RFS_DECL_RE = /\buniform\s+/;
+const RFS_GL_TYPES = { color: 'vec3', bool: 'bool', float: 'float' };
+
+function rfsInferType(value) {
+  if (HEX_RE.test(value)) return { type: 'color', value };
+  if (value === '0' || value === '1') return { type: 'bool', value: Number(value) };
+  if (RFS_NUM_RE.test(value)) return { type: 'float', value: Number(value) };
+  return null;
+}
+
+// returns { ok, errors, doc }. same rules as the rfs-format repo (src/parse.js).
+function rfsParse(source) {
+  const errors = [];
+  const text = String(source);
+  const bytes = new TextEncoder().encode(text).length;
+  if (bytes > RFS_MAX_BYTES) errors.push(`file is ${bytes} bytes, max is ${RFS_MAX_BYTES}`);
+  const lines = text.replace(/\r\n/g, '\n').split('\n');
+  if (lines[0].trim() !== 'rfs 1') errors.push('line 1 must be "rfs 1"');
+
+  const doc = { meta: {}, uniforms: {}, target: { scope: 'page', blend: 'overlay' }, fragment: '' };
+  const seen = [];
+  const fragLines = [];
+  let section = null;
+  for (let i = 1; i < lines.length; i += 1) {
+    const raw = lines[i];
+    const line = raw.trim();
+    const where = `line ${i + 1}`;
+    if (section === 'fragment') {
+      fragLines.push(raw);
+      continue;
+    }
+    if (line === '' || line.charAt(0) === '#') continue;
+
+    const header = line.match(/^\[([a-z]+)\]$/);
+    if (header !== null) {
+      const name = header[1];
+      if (RFS_SECTIONS.indexOf(name) === -1) errors.push(`${where}: unknown section [${name}]`);
+      else if (seen.indexOf(name) > -1) errors.push(`${where}: section [${name}] appears twice`);
+      else if (seen.length > 0 && RFS_SECTIONS.indexOf(name) < RFS_SECTIONS.indexOf(seen[seen.length - 1])) errors.push(`${where}: section [${name}] is out of order`);
+      seen.push(name);
+      section = name;
+      continue;
+    }
+    if (section === null) {
+      errors.push(`${where}: content before the first section`);
+      continue;
+    }
+    const kv = line.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(.+)$/);
+    if (kv === null) {
+      errors.push(`${where}: expected key = value`);
+      continue;
+    }
+    const key = kv[1];
+    const value = kv[2].trim();
+    if (section === 'meta') {
+      if (['name', 'author', 'description'].indexOf(key) > -1) doc.meta[key] = value;
+      else errors.push(`${where}: unknown meta key "${key}"`);
+    } else if (section === 'target') {
+      if (['scope', 'blend'].indexOf(key) > -1) doc.target[key] = value;
+      else errors.push(`${where}: unknown target key "${key}"`);
+    } else if (section === 'uniforms') {
+      if (RFS_KEY_RE.test(key) === false) {
+        errors.push(`${where}: bad uniform name "${key}"`);
+      } else if (RFS_RESERVED.indexOf(key) > -1) {
+        errors.push(`${where}: "${key}" is a reserved built-in name`);
+      } else {
+        const typed = rfsInferType(value);
+        if (typed === null) errors.push(`${where}: uniform "${key}" has unknown value "${value}"`);
+        else doc.uniforms[key] = typed;
+      }
+    }
+  }
+
+  for (const name of ['meta', 'uniforms', 'fragment']) {
+    if (seen.indexOf(name) === -1) errors.push(`missing section [${name}]`);
+  }
+  for (const key of ['name', 'author', 'description']) {
+    if (doc.meta[key] === undefined) errors.push(`[meta] is missing ${key}`);
+  }
+  if (doc.meta.name !== undefined && RFS_NAME_RE.test(doc.meta.name) === false) {
+    errors.push('[meta] name must be lowercase letters, numbers, dashes, max 40 chars');
+  }
+  if (doc.meta.description !== undefined && doc.meta.description.length > 120) {
+    errors.push('[meta] description max is 120 chars');
+  }
+  if (doc.target.scope !== 'page' && RFS_WINDOW_RE.test(doc.target.scope) === false) {
+    errors.push('[target] scope must be page or window:<name>');
+  }
+  if (doc.target.blend !== 'overlay' && doc.target.blend !== 'replace') {
+    errors.push('[target] blend must be overlay or replace');
+  }
+
+  doc.fragment = fragLines.join('\n').trim();
+  if (seen.indexOf('fragment') > -1) {
+    if (doc.fragment === '') {
+      errors.push('[fragment] is empty');
+    } else {
+      if (RFS_MAIN_RE.test(doc.fragment) === false) errors.push('[fragment] must define void main()');
+      if (RFS_TEXTURE_RE.test(doc.fragment)) errors.push('[fragment] texture sampling is not allowed');
+      if (RFS_DECL_RE.test(doc.fragment)) errors.push('[fragment] declare uniforms in [uniforms], not in the fragment');
+      const loop = /for\s*\([^;]*;\s*[^;]*<\s*(\d+)/g;
+      let m = loop.exec(doc.fragment);
+      while (m !== null) {
+        if (Number(m[1]) > 64) errors.push('[fragment] loops over 64 iterations are not allowed');
+        m = loop.exec(doc.fragment);
+      }
+    }
+  }
+  return { ok: errors.length === 0, errors, doc };
+}
+
+// stored in config only if it parses, so a broken shader never reaches the viewer
+function sanitizeShader(raw) {
+  const text = clampText(raw, RFS_MAX_BYTES + 1);
+  if (text.trim() === '') return '';
+  return rfsParse(text).ok ? text : '';
+}
+
+// the runtime declares built-ins and [uniforms]; the fragment body is used as written
+function rfsShaderSource(parsed) {
+  const decls = Object.keys(parsed.doc.uniforms)
+    .map((k) => `uniform ${RFS_GL_TYPES[parsed.doc.uniforms[k].type]} u_${k};`)
+    .join('\n');
+  return 'precision mediump float;\nuniform float u_time;\nuniform vec2 u_resolution;\n' + decls + '\n' + parsed.doc.fragment;
+}
+
+function rfsUniformSetter(gl, prog, key, u) {
+  const loc = gl.getUniformLocation(prog, 'u_' + key);
+  if (loc === null) return null;
+  if (u.type === 'color') {
+    const c = [1, 3, 5].map((i) => parseInt(u.value.slice(i, i + 2), 16) / 255);
+    return () => gl.uniform3f(loc, c[0], c[1], c[2]);
+  }
+  if (u.type === 'bool') return () => gl.uniform1i(loc, u.value);
+  return () => gl.uniform1f(loc, u.value);
+}
+
+// page scope only for now. window scope parses, but does not render yet.
+function applyShader(root, text) {
+  if (root.shaderStop) {
+    root.shaderStop();
+    root.shaderStop = null;
+  }
+  if (text === '' || text === undefined) return;
+  const parsed = rfsParse(text);
+  if (parsed.ok === false || parsed.doc.target.scope !== 'page') return;
+
+  const overlay = parsed.doc.target.blend === 'overlay';
+  const canvas = el('canvas', { class: 'rfs-canvas', 'aria-hidden': 'true' });
+  canvas.style.cssText = `position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:${overlay ? 50 : -1}`;
+  root.style.isolation = 'isolate';
+  root.append(canvas);
+
+  const gl = canvas.getContext('webgl', { alpha: true, premultipliedAlpha: false });
+  if (gl === null) {
+    canvas.remove();
+    return;
+  }
+  const compile = (type, src) => {
+    const shader = gl.createShader(type);
+    gl.shaderSource(shader, src);
+    gl.compileShader(shader);
+    return gl.getShaderParameter(shader, gl.COMPILE_STATUS) ? shader : null;
+  };
+  const vs = compile(gl.VERTEX_SHADER, 'attribute vec2 a_pos; void main() { gl_Position = vec4(a_pos, 0.0, 1.0); }');
+  const fs = compile(gl.FRAGMENT_SHADER, rfsShaderSource(parsed));
+  const prog = gl.createProgram();
+  if (vs !== null && fs !== null) {
+    gl.attachShader(prog, vs);
+    gl.attachShader(prog, fs);
+    gl.linkProgram(prog);
+  }
+  if (vs === null || fs === null || gl.getProgramParameter(prog, gl.LINK_STATUS) === false) {
+    canvas.remove();
+    return;
+  }
+  gl.useProgram(prog);
+
+  const buf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+  const pos = gl.getAttribLocation(prog, 'a_pos');
+  gl.enableVertexAttribArray(pos);
+  gl.vertexAttribPointer(pos, 2, gl.FLOAT, false, 0, 0);
+
+  const timeLoc = gl.getUniformLocation(prog, 'u_time');
+  const resLoc = gl.getUniformLocation(prog, 'u_resolution');
+  const setters = Object.keys(parsed.doc.uniforms)
+    .map((k) => rfsUniformSetter(gl, prog, k, parsed.doc.uniforms[k]))
+    .filter(Boolean);
+
+  const resize = () => {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = Math.max(1, Math.floor(canvas.clientWidth * dpr));
+    canvas.height = Math.max(1, Math.floor(canvas.clientHeight * dpr));
+    gl.viewport(0, 0, canvas.width, canvas.height);
+  };
+  const observer = new ResizeObserver(resize);
+  observer.observe(canvas);
+
+  const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const start = performance.now();
+  let frame = 0;
+  const draw = () => {
+    gl.uniform1f(timeLoc, still ? 0 : (performance.now() - start) / 1000);
+    gl.uniform2f(resLoc, canvas.width, canvas.height);
+    setters.forEach((set) => set());
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    if (still === false) frame = requestAnimationFrame(draw);
+  };
+  root.shaderStop = () => {
+    cancelAnimationFrame(frame);
+    observer.disconnect();
+    canvas.remove();
+  };
+  resize();
+  draw();
+}
+
 // ---------- renderer (shared by builder preview, live viewer, and export) ----------
 function applyWallpaper(root, wp) {
   const s = root.style;
@@ -543,6 +773,7 @@ function renderOS(root, cfg, opts = {}) {
   root.dataset.theme = cfg.theme;
   root.classList.toggle('crt', cfg.crt);
   applyWallpaper(root, cfg.wallpaper);
+  applyShader(root, cfg.shader);
 
   const os = { root, cfg, zTop: 10, unlocked: new Set(), open: new Map() };
   os.desktop = el('div', { class: 'desktop' },
@@ -1207,12 +1438,31 @@ function viewTheme(host) {
   const crt = el('input', { type: 'checkbox' });
   crt.checked = draft.crt;
   crt.addEventListener('change', () => { draft.crt = crt.checked; commit(); });
+  const shader = el('textarea', { rows: '10', spellcheck: 'false', placeholder: 'paste a .rfs file here' });
+  shader.value = draft.shader || '';
+  const shaderMsg = el('div', { class: 'dim' });
+  const checkShader = () => {
+    if (shader.value.trim() === '') {
+      shaderMsg.textContent = 'no shader';
+      return;
+    }
+    const r = rfsParse(shader.value);
+    shaderMsg.textContent = r.ok ? 'shader ok' : r.errors.join(' | ');
+  };
+  shader.addEventListener('change', () => {
+    draft.shader = clampText(shader.value, RFS_MAX_BYTES + 1);
+    commit();
+    checkShader();
+  });
+  checkShader();
   host.append(
     el('h3', { text: 'Preset theme' }), themeRow,
     field('Wallpaper type', type),
     field('Color (solid or grid)', color),
     field('Image url (when type is image)', image),
     field('CRT scanlines', crt),
+    field('Shader (.rfs)', shader),
+    shaderMsg,
   );
 }
 
