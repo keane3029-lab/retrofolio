@@ -1438,31 +1438,42 @@ function viewTheme(host) {
   const crt = el('input', { type: 'checkbox' });
   crt.checked = draft.crt;
   crt.addEventListener('change', () => { draft.crt = crt.checked; commit(); });
-  const shader = el('textarea', { rows: '10', spellcheck: 'false', placeholder: 'paste a .rfs file here' });
-  shader.value = draft.shader || '';
-  const shaderMsg = el('div', { class: 'dim' });
-  const checkShader = () => {
-    if (shader.value.trim() === '') {
-      shaderMsg.textContent = 'no shader';
+  const shaderFile = el('input', { type: 'file', accept: '.rfs,text/plain' });
+  const shaderStatus = el('div', { class: 'dim' });
+  if (draft.shader) {
+    const meta = rfsParse(draft.shader).doc.meta;
+    shaderStatus.textContent = 'loaded: ' + (meta.name || 'shader') + ' (' + new TextEncoder().encode(draft.shader).length + ' bytes)';
+  } else {
+    shaderStatus.textContent = 'no shader loaded';
+  }
+  shaderFile.addEventListener('change', async () => {
+    const file = shaderFile.files[0];
+    if (file === undefined) return;
+    if (file.size > RFS_MAX_BYTES) return flash('shader is over 5 KB');
+    const text = await file.text();
+    const r = rfsParse(text);
+    if (r.ok === false) {
+      shaderStatus.textContent = 'not a valid .rfs: ' + r.errors.join(' | ');
       return;
     }
-    const r = rfsParse(shader.value);
-    shaderMsg.textContent = r.ok ? 'shader ok' : r.errors.join(' | ');
-  };
-  shader.addEventListener('change', () => {
-    draft.shader = clampText(shader.value, RFS_MAX_BYTES + 1);
+    draft.shader = text;
     commit();
-    checkShader();
+    renderBody();
   });
-  checkShader();
+  const shaderRemove = el('button', {
+    class: 'mini', type: 'button', text: 'remove shader',
+    onclick: () => { draft.shader = ''; commit(); renderBody(); },
+  });
   host.append(
     el('h3', { text: 'Preset theme' }), themeRow,
     field('Wallpaper type', type),
     field('Color (solid or grid)', color),
     field('Image url (when type is image)', image),
     field('CRT scanlines', crt),
-    field('Shader (.rfs)', shader),
-    shaderMsg,
+    el('h3', { text: 'Shader' }),
+    field('Upload a .rfs file (5 KB max)', shaderFile),
+    shaderStatus,
+    shaderRemove,
   );
 }
 
